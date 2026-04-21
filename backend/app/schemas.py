@@ -16,6 +16,11 @@ class UserCreate(BaseModel):
     name: str
 
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

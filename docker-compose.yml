@@ -7,6 +7,9 @@ services:
       - peptracker_db:/app/data
     environment:
       DATABASE_URL: sqlite:////app/data/peptracker.db
+      SECRET_KEY: "change-me-in-production"
+      REGISTRATION_ENABLED: "true"
+      COOKIE_SECURE: "false"
 
   frontend:
     build: ./frontend
