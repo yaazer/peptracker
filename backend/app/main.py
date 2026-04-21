@@ -1,8 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import health
-from app.routers import auth
+from app.routers import auth, compounds, health, injections
 
 app = FastAPI(title="peptracker")
 
@@ -16,3 +15,5 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(compounds.router)
+app.include_router(injections.router)
