@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clock, FlaskConical, Home, Plus } from "@/components/icons";
+import { Bell, Clock, FlaskConical, Home, Plus } from "@/components/icons";
 
 const tabs = [
   { href: "/dashboard", label: "Home", Icon: Home },
   { href: "/log", label: "Log", Icon: Plus },
   { href: "/history", label: "History", Icon: Clock },
   { href: "/compounds", label: "Compounds", Icon: FlaskConical },
+  { href: "/protocols", label: "Protocols", Icon: Bell },
 ];
 
 export default function BottomNav() {
@@ -30,7 +31,7 @@ export default function BottomNav() {
               <Icon
                 size={22}
                 strokeWidth={active ? 2.5 : 1.8}
-                className={active ? "text-blue-600" : "text-gray-400"}
+                className={active ? "text-blue-500" : "text-gray-400"}
               />
               {label}
             </Link>

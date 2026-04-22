@@ -26,6 +26,8 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
+    ntfy_topic: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     compounds: Mapped[list["Compound"]] = relationship(
         "Compound", back_populates="user", cascade="all, delete-orphan"
     )
@@ -96,6 +98,7 @@ class Protocol(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    last_fired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="protocols")
     compound: Mapped["Compound"] = relationship("Compound", back_populates="protocols")

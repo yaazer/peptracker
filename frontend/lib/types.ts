@@ -68,6 +68,42 @@ export function timeUntil(iso: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Protocol + Reminder types
+// ---------------------------------------------------------------------------
+
+export interface ProtocolRead {
+  id: number;
+  user_id: number;
+  compound_id: number;
+  compound_name: string;
+  dose_mcg: number;
+  schedule_cron: string;
+  active: boolean;
+  notes: string | null;
+  created_at: string;
+  last_fired_at: string | null;
+  next_fire_at: string | null;
+}
+
+export interface ReminderLogRead {
+  id: number;
+  protocol_id: number;
+  compound_name: string;
+  protocol_dose_mcg: number;
+  fired_at: string;
+  delivered: boolean;
+  error: string | null;
+}
+
+export interface UserProfile {
+  id: number;
+  email: string;
+  name: string;
+  ntfy_topic: string | null;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard API types
 // ---------------------------------------------------------------------------
 

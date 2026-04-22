@@ -27,7 +27,12 @@ class UserRead(BaseModel):
     id: int
     email: str
     name: str
+    ntfy_topic: str | None
     created_at: datetime
+
+
+class UserUpdate(BaseModel):
+    ntfy_topic: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -125,11 +130,14 @@ class ProtocolRead(BaseModel):
     id: int
     user_id: int
     compound_id: int
+    compound_name: str
     dose_mcg: int
     schedule_cron: str
     active: bool
     notes: str | None
     created_at: datetime
+    last_fired_at: datetime | None
+    next_fire_at: datetime | None
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +149,8 @@ class ReminderLogRead(BaseModel):
 
     id: int
     protocol_id: int
+    compound_name: str
+    protocol_dose_mcg: int
     fired_at: datetime
     delivered: bool
     error: str | None
