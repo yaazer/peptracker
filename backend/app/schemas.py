@@ -144,3 +144,50 @@ class ReminderLogRead(BaseModel):
     fired_at: datetime
     delivered: bool
     error: str | None
+
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+class NextDoseItem(BaseModel):
+    protocol_id: int
+    compound_name: str
+    dose_mcg: int
+    next_fire_at: datetime
+    schedule_cron: str
+
+
+class LastByCompoundItem(BaseModel):
+    compound_id: int
+    compound_name: str
+    dose_mcg: int
+    injection_site: InjectionSite
+    injected_at: datetime
+
+
+class WeekCompoundSummary(BaseModel):
+    compound_name: str
+    count: int
+    total_mcg: int
+
+
+class WeekSummary(BaseModel):
+    total_injections: int
+    by_compound: list[WeekCompoundSummary]
+
+
+class TimelinePoint(BaseModel):
+    date: str
+    compound_id: int
+    compound_name: str
+    total_mcg: int
+    count: int
+
+
+class DashboardResponse(BaseModel):
+    next_doses: list[NextDoseItem]
+    last_by_compound: list[LastByCompoundItem]
+    week_summary: WeekSummary
+    recent: list[InjectionRead]
+    timeline: list[TimelinePoint]

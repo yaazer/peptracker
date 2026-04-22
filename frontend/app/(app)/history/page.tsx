@@ -48,16 +48,18 @@ export default function HistoryPage() {
     setInjections((prev) => prev.filter((i) => i.id !== id));
   };
 
+  const inputCls = "w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white";
+
   return (
     <div className="px-4 pt-6">
-      <h1 className="mb-4 text-xl font-bold text-gray-900">History</h1>
+      <h1 className="mb-4 text-xl font-bold text-gray-900 dark:text-white">History</h1>
 
       {/* Filters */}
       <div className="mb-4 space-y-2">
         <select
           value={filterCompound}
           onChange={(e) => setFilterCompound(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
+          className={inputCls}
         >
           <option value="">All compounds</option>
           {compounds.map((c) => (
@@ -68,21 +70,21 @@ export default function HistoryPage() {
         </select>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="mb-1 block text-xs text-gray-500">From</label>
+            <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">From</label>
             <input
               type="date"
               value={filterFrom}
               onChange={(e) => setFilterFrom(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none"
+              className={inputCls}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-gray-500">To</label>
+            <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">To</label>
             <input
               type="date"
               value={filterTo}
               onChange={(e) => setFilterTo(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none"
+              className={inputCls}
             />
           </div>
         </div>
@@ -99,7 +101,7 @@ export default function HistoryPage() {
       {/* List */}
       {injections.length === 0 ? (
         <div className="mt-16 text-center">
-          <p className="text-gray-400">No injections found.</p>
+          <p className="text-gray-400 dark:text-gray-500">No injections found.</p>
           <Link href="/log" className="mt-2 block text-sm text-blue-600">
             Log your first injection →
           </Link>
@@ -111,28 +113,28 @@ export default function HistoryPage() {
             return (
               <div
                 key={inj.id}
-                className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+                className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-baseline gap-2">
-                      <span className="font-semibold text-gray-900">
+                      <span className="font-semibold text-gray-900 dark:text-white">
                         {compound?.name ?? `Compound #${inj.compound_id}`}
                       </span>
-                      <span className="text-sm text-gray-400">
+                      <span className="text-sm text-gray-400 dark:text-gray-500">
                         {formatDatetime(inj.injected_at)}
                       </span>
                     </div>
-                    <p className="mt-0.5 text-sm text-gray-600">
+                    <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
                       {inj.dose_mcg} mcg · {siteLabel(inj.injection_site)}
                     </p>
                     {inj.notes && (
-                      <p className="mt-1 text-sm text-gray-400">{inj.notes}</p>
+                      <p className="mt-1 text-sm text-gray-400 dark:text-gray-500">{inj.notes}</p>
                     )}
                   </div>
                   <button
                     onClick={() => handleDelete(inj.id)}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500 dark:text-gray-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
                   >
                     <Trash2 size={16} />
                   </button>

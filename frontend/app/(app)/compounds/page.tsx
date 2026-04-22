@@ -105,10 +105,13 @@ export default function CompoundsPage() {
     load();
   };
 
+  const inputCls = "w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white";
+  const labelCls = "mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300";
+
   return (
     <div className="px-4 pt-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Compounds</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Compounds</h1>
         <button
           onClick={openAdd}
           className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"
@@ -117,7 +120,7 @@ export default function CompoundsPage() {
         </button>
       </div>
 
-      <label className="mb-4 flex items-center gap-2 text-sm text-gray-600">
+      <label className="mb-4 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
         <input
           type="checkbox"
           checked={showArchived}
@@ -128,18 +131,18 @@ export default function CompoundsPage() {
       </label>
 
       {compounds.length === 0 && (
-        <p className="mt-12 text-center text-gray-400">No compounds yet. Tap Add to create one.</p>
+        <p className="mt-12 text-center text-gray-400 dark:text-gray-500">No compounds yet. Tap Add to create one.</p>
       )}
 
       <div className="space-y-3">
         {compounds.map((c) => (
           <div
             key={c.id}
-            className={`rounded-xl border bg-white p-4 shadow-sm ${c.archived ? "opacity-50" : ""}`}
+            className={`rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900 ${c.archived ? "opacity-50" : ""}`}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-semibold text-gray-900">{c.name}</p>
+                <p className="font-semibold text-gray-900 dark:text-white">{c.name}</p>
                 {c.concentration_mg_per_ml && (
                   <p className="mt-0.5 text-sm text-blue-600">
                     {c.concentration_mg_per_ml} mg/mL
@@ -148,26 +151,26 @@ export default function CompoundsPage() {
                   </p>
                 )}
                 {c.notes && (
-                  <p className="mt-1 truncate text-sm text-gray-500">{c.notes}</p>
+                  <p className="mt-1 truncate text-sm text-gray-500 dark:text-gray-400">{c.notes}</p>
                 )}
               </div>
               <div className="flex shrink-0 gap-1">
                 <button
                   onClick={() => openEdit(c)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
                 >
                   <Pencil size={16} />
                 </button>
                 <button
                   onClick={() => toggleArchive(c)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
                   title={c.archived ? "Unarchive" : "Archive"}
                 >
                   {c.archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
                 </button>
                 <button
                   onClick={() => handleDelete(c)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -183,84 +186,84 @@ export default function CompoundsPage() {
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
           onClick={(e) => e.target === e.currentTarget && closeModal()}
         >
-          <div className="w-full max-w-md rounded-t-2xl bg-white p-6 sm:rounded-2xl">
-            <h2 className="mb-4 text-lg font-bold text-gray-900">
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-6 sm:rounded-2xl dark:bg-gray-900">
+            <h2 className="mb-4 text-lg font-bold text-gray-900 dark:text-white">
               {editing ? "Edit compound" : "Add compound"}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Name</label>
+                <label className={labelCls}>Name</label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   required
-                  className="w-full rounded-lg border border-gray-300 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
+                  className={inputCls}
                   placeholder="e.g. BPC-157"
                 />
               </div>
 
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
                 Reconstitution (optional)
               </p>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="mb-1 block text-sm text-gray-600">mg/mL</label>
+                  <label className="mb-1 block text-sm text-gray-600 dark:text-gray-400">mg/mL</label>
                   <input
                     type="number"
                     step="any"
                     min="0"
                     value={form.concentration_mg_per_ml}
                     onChange={(e) => setForm({ ...form, concentration_mg_per_ml: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
+                    className={inputCls}
                     placeholder="0.00"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm text-gray-600">Vial mg</label>
+                  <label className="mb-1 block text-sm text-gray-600 dark:text-gray-400">Vial mg</label>
                   <input
                     type="number"
                     step="any"
                     min="0"
                     value={form.vial_size_mg}
                     onChange={(e) => setForm({ ...form, vial_size_mg: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
+                    className={inputCls}
                     placeholder="0.00"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm text-gray-600">BAC mL</label>
+                  <label className="mb-1 block text-sm text-gray-600 dark:text-gray-400">BAC mL</label>
                   <input
                     type="number"
                     step="any"
                     min="0"
                     value={form.bac_water_ml}
                     onChange={(e) => setForm({ ...form, bac_water_ml: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
+                    className={inputCls}
                     placeholder="0.00"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+                <label className={labelCls}>Notes</label>
                 <textarea
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   rows={2}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
+                  className={inputCls}
                   placeholder="Optional"
                 />
               </div>
 
-              {error && <p className="text-sm text-red-600">{error}</p>}
+              {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
               <div className="flex gap-3 pt-1">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 rounded-lg border border-gray-300 py-3 text-sm font-medium text-gray-700"
+                  className="flex-1 rounded-lg border border-gray-300 py-3 text-sm font-medium text-gray-700 dark:border-gray-700 dark:text-gray-300"
                 >
                   Cancel
                 </button>
