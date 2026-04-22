@@ -1,16 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Compound, User
+from app.models import BlendComponent, Compound, User
 from app.schemas import CompoundCreate, CompoundRead, CompoundUpdate
 
 router = APIRouter(prefix="/api/compounds", tags=["compounds"])
 
 
 def _get_owned_compound(compound_id: int, user: User, db: Session) -> Compound:
-    compound = db.get(Compound, compound_id)
+    compound = (
+        db.query(Compound)
+        .options(selectinload(Compound.blend_components))
+        .filter(Compound.id == compound_id)
+        .first()
+    )
     if compound is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compound not found")
     if compound.user_id != user.id:
@@ -24,7 +29,11 @@ def list_compounds(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Compound).filter(Compound.user_id == current_user.id)
+    q = (
+        db.query(Compound)
+        .options(selectinload(Compound.blend_components))
+        .filter(Compound.user_id == current_user.id)
+    )
     if not include_archived:
         q = q.filter(Compound.archived == False)  # noqa: E712
     return q.order_by(Compound.name).all()
@@ -36,11 +45,26 @@ def create_compound(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    compound = Compound(user_id=current_user.id, **body.model_dump())
+    blend_components_data = body.blend_components
+    compound_data = body.model_dump(exclude={"blend_components"})
+    compound = Compound(user_id=current_user.id, **compound_data)
     db.add(compound)
+    db.flush()
+    if blend_components_data:
+        for i, bc_data in enumerate(blend_components_data):
+            bc = BlendComponent(
+                compound_id=compound.id,
+                position=bc_data.position if bc_data.position else i,
+                **bc_data.model_dump(exclude={"position"}),
+            )
+            db.add(bc)
     db.commit()
-    db.refresh(compound)
-    return compound
+    return (
+        db.query(Compound)
+        .options(selectinload(Compound.blend_components))
+        .filter(Compound.id == compound.id)
+        .one()
+    )
 
 
 @router.patch("/{compound_id}", response_model=CompoundRead)
@@ -51,11 +75,29 @@ def update_compound(
     db: Session = Depends(get_db),
 ):
     compound = _get_owned_compound(compound_id, current_user, db)
-    for field, value in body.model_dump(exclude_unset=True).items():
+    update_data = body.model_dump(exclude_unset=True, exclude={"blend_components"})
+    for field, value in update_data.items():
         setattr(compound, field, value)
+
+    if body.blend_components is not None:
+        for bc in list(compound.blend_components):
+            db.delete(bc)
+        db.flush()
+        for i, bc_data in enumerate(body.blend_components):
+            bc = BlendComponent(
+                compound_id=compound.id,
+                position=bc_data.position if bc_data.position else i,
+                **bc_data.model_dump(exclude={"position"}),
+            )
+            db.add(bc)
+
     db.commit()
-    db.refresh(compound)
-    return compound
+    return (
+        db.query(Compound)
+        .options(selectinload(Compound.blend_components))
+        .filter(Compound.id == compound.id)
+        .one()
+    )
 
 
 @router.delete("/{compound_id}", status_code=status.HTTP_204_NO_CONTENT)

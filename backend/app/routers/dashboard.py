@@ -100,7 +100,7 @@ def get_dashboard(
     last_by_compound.sort(key=lambda x: x.injected_at, reverse=True)
 
     # ------------------------------------------------------------------
-    # 3. This week's summary
+    # 3. This week's summary (per-component for blends)
     # ------------------------------------------------------------------
     week_start = now - timedelta(days=7)
     week_injections = (
@@ -122,9 +122,14 @@ def get_dashboard(
 
     by_cpd: dict[str, dict] = defaultdict(lambda: {"count": 0, "total_mcg": 0})
     for inj in week_injections:
-        name = compound_name(inj.compound_id)
-        by_cpd[name]["count"] += 1
-        by_cpd[name]["total_mcg"] += inj.dose_mcg
+        if inj.component_snapshot:
+            for comp in inj.component_snapshot:
+                by_cpd[comp["name"]]["count"] += 1
+                by_cpd[comp["name"]]["total_mcg"] += comp["dose_mcg"]
+        else:
+            name = compound_name(inj.compound_id)
+            by_cpd[name]["count"] += 1
+            by_cpd[name]["total_mcg"] += inj.dose_mcg
 
     week_summary = WeekSummary(
         total_injections=len(week_injections),
@@ -147,7 +152,7 @@ def get_dashboard(
     recent = [InjectionRead.model_validate(r) for r in recent_rows]
 
     # ------------------------------------------------------------------
-    # 5. 30-day timeline grouped by date + compound
+    # 5. 30-day timeline grouped by date + compound/component
     # ------------------------------------------------------------------
     thirty_ago = now - timedelta(days=30)
     timeline_rows = (
@@ -162,9 +167,15 @@ def get_dashboard(
     tl_map: dict[tuple, dict] = defaultdict(lambda: {"total_mcg": 0, "count": 0})
     for inj in timeline_rows:
         date_str = inj.injected_at.strftime("%Y-%m-%d")
-        key = (date_str, inj.compound_id, compound_name(inj.compound_id))
-        tl_map[key]["total_mcg"] += inj.dose_mcg
-        tl_map[key]["count"] += 1
+        if inj.component_snapshot:
+            for comp in inj.component_snapshot:
+                key = (date_str, inj.compound_id, comp["name"])
+                tl_map[key]["total_mcg"] += comp["dose_mcg"]
+                tl_map[key]["count"] += 1
+        else:
+            key = (date_str, inj.compound_id, compound_name(inj.compound_id))
+            tl_map[key]["total_mcg"] += inj.dose_mcg
+            tl_map[key]["count"] += 1
 
     timeline = [
         TimelinePoint(date=k[0], compound_id=k[1], compound_name=k[2], **v)

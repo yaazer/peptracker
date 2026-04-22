@@ -61,7 +61,10 @@ def check_and_fire() -> None:
 
             # Due — fire notification
             compound_name = protocol.compound.name
-            body = f"Time for {compound_name} — {protocol.dose_mcg} mcg"
+            if protocol.dose_mode == "anchor":
+                body = f"Time for {compound_name} — {protocol.dose_mcg} mcg (anchor)"
+            else:
+                body = f"Time for {compound_name} — {protocol.dose_mcg} mcg"
             delivered, error = _send_ntfy(protocol.user.ntfy_topic, "peptracker", body)
 
             log = ReminderLog(

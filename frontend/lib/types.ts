@@ -1,3 +1,19 @@
+export interface BlendComponent {
+  id?: number;
+  name: string;
+  linked_compound_id: number | null;
+  amount_mg: number;
+  is_anchor: boolean;
+  position: number;
+}
+
+export interface ComponentSnapshot {
+  name: string;
+  amount_mg: number;
+  dose_mcg: number;
+  linked_compound_id: number | null;
+}
+
 export interface CompoundRead {
   id: number;
   user_id: number;
@@ -11,6 +27,8 @@ export interface CompoundRead {
   preset_vial_sizes: number[] | null;
   default_syringe_type: string | null;
   default_syringe_ml: number | null;
+  is_blend: boolean;
+  blend_components: BlendComponent[];
 }
 
 export interface InjectionRead {
@@ -22,6 +40,9 @@ export interface InjectionRead {
   injected_at: string;
   notes: string | null;
   created_at: string;
+  draw_volume_ml: number | null;
+  dose_mode: string;
+  component_snapshot: ComponentSnapshot[] | null;
 }
 
 export const INJECTION_SITES = [
@@ -86,6 +107,8 @@ export interface ProtocolRead {
   created_at: string;
   last_fired_at: string | null;
   next_fire_at: string | null;
+  dose_mode: string;
+  anchor_component_id: number | null;
 }
 
 export interface ReminderLogRead {

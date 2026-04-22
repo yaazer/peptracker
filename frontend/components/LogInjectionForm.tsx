@@ -18,12 +18,25 @@ interface Props {
 export default function LogInjectionForm({ compounds, onSuccess }: Props) {
   const [compoundId, setCompoundId] = useState("");
   const [doseMcg, setDoseMcg] = useState("");
+  const [doseMode, setDoseMode] = useState<"total" | "anchor">("total");
   const [site, setSite] = useState("");
   const [injectedAt, setInjectedAt] = useState(localDatetimeNow());
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedCompound = compounds.find((c) => String(c.id) === compoundId) ?? null;
+  const isBlend = selectedCompound?.is_blend ?? false;
+  const anchorComponent = selectedCompound?.blend_components.find((bc) => bc.is_anchor)
+    ?? selectedCompound?.blend_components[0]
+    ?? null;
+
+  const handleCompoundChange = (id: string) => {
+    setCompoundId(id);
+    setDoseMode("total");
+    setDoseMcg("");
+  };
 
   const reset = () => {
     setDoseMcg("");
@@ -46,6 +59,7 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
           injection_site: site,
           injected_at: new Date(injectedAt).toISOString(),
           notes: notes || null,
+          dose_mode: isBlend ? doseMode : "total",
         }),
       });
       if (!res.ok) {
@@ -79,19 +93,50 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
         <label className={labelCls}>Compound</label>
         <select
           value={compoundId}
-          onChange={(e) => setCompoundId(e.target.value)}
+          onChange={(e) => handleCompoundChange(e.target.value)}
           required
           className={inputCls}
         >
           <option value="">Select compound…</option>
           {compounds.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
+            <option key={c.id} value={c.id}>
+              {c.name}{c.is_blend ? " (blend)" : ""}
+            </option>
           ))}
         </select>
       </div>
 
+      {/* Blend dose mode toggle */}
+      {isBlend && (
+        <div>
+          <label className={labelCls}>Dose mode</label>
+          <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+            {(["total", "anchor"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => { setDoseMode(mode); setDoseMcg(""); }}
+                className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                  doseMode === mode
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                }`}
+              >
+                {mode === "total" ? "Total blend" : `By ${anchorComponent?.name ?? "anchor"}`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
-        <label className={labelCls}>Dose (mcg)</label>
+        <label className={labelCls}>
+          {isBlend && doseMode === "anchor" && anchorComponent
+            ? `${anchorComponent.name} dose (mcg)`
+            : isBlend
+            ? "Total dose (mcg)"
+            : "Dose (mcg)"}
+        </label>
         <input
           type="number"
           min="1"

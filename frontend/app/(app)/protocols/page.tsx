@@ -191,6 +191,7 @@ function CronHelper({
 interface FormState {
   compound_id: string;
   dose_mcg: string;
+  dose_mode: "total" | "anchor";
   cron: CronState;
   active: boolean;
   notes: string;
@@ -199,6 +200,7 @@ interface FormState {
 const emptyForm = (): FormState => ({
   compound_id: "",
   dose_mcg: "",
+  dose_mode: "total",
   cron: { ...defaultCron },
   active: true,
   notes: "",
@@ -215,6 +217,10 @@ function cronStateFromString(cron: string): CronState {
   if (dom === "*" && dow === "*") return { ...base, type: "daily" };
   if (dom === "*" && !isNaN(parseInt(dow))) return { ...base, type: "weekly", weekday: dow };
   return { ...base, type: "custom" };
+}
+
+function compoundById(compounds: CompoundRead[], id: string) {
+  return compounds.find((c) => String(c.id) === id) ?? null;
 }
 
 export default function ProtocolsPage() {
@@ -250,6 +256,7 @@ export default function ProtocolsPage() {
     setForm({
       compound_id: String(p.compound_id),
       dose_mcg: String(p.dose_mcg),
+      dose_mode: (p.dose_mode as "total" | "anchor") ?? "total",
       cron: cronStateFromString(p.schedule_cron),
       active: p.active,
       notes: p.notes ?? "",
@@ -272,6 +279,7 @@ export default function ProtocolsPage() {
       schedule_cron,
       active: form.active,
       notes: form.notes || null,
+      dose_mode: form.dose_mode,
     };
     try {
       const res = editing
@@ -421,19 +429,61 @@ export default function ProtocolsPage() {
                 <label className={labelCls}>Compound</label>
                 <select
                   value={form.compound_id}
-                  onChange={(e) => setForm({ ...form, compound_id: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, compound_id: e.target.value, dose_mode: "total" })
+                  }
                   required
                   className={inputCls}
                 >
                   <option value="">Select compound…</option>
                   {compounds.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.id}>
+                      {c.name}{c.is_blend ? " (blend)" : ""}
+                    </option>
                   ))}
                 </select>
               </div>
 
+              {/* Dose mode — only for blend compounds */}
+              {compoundById(compounds, form.compound_id)?.is_blend && (
+                <div>
+                  <label className={labelCls}>Dose mode</label>
+                  <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+                    {(["total", "anchor"] as const).map((mode) => {
+                      const c = compoundById(compounds, form.compound_id);
+                      const anchor = c?.blend_components.find((bc) => bc.is_anchor)
+                        ?? c?.blend_components[0];
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setForm({ ...form, dose_mode: mode })}
+                          className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                            form.dose_mode === mode
+                              ? "bg-blue-600 text-white"
+                              : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                          }`}
+                        >
+                          {mode === "total" ? "Total blend" : `By ${anchor?.name ?? "anchor"}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div>
-                <label className={labelCls}>Dose (mcg)</label>
+                <label className={labelCls}>
+                  {(() => {
+                    const c = compoundById(compounds, form.compound_id);
+                    if (c?.is_blend && form.dose_mode === "anchor") {
+                      const anchor = c.blend_components.find((bc) => bc.is_anchor)
+                        ?? c.blend_components[0];
+                      return `${anchor?.name ?? "Anchor"} dose (mcg)`;
+                    }
+                    return "Dose (mcg)";
+                  })()}
+                </label>
                 <input
                   type="number"
                   min="1"

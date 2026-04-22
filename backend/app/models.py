@@ -57,6 +57,7 @@ class Compound(Base):
     preset_vial_sizes: Mapped[list | None] = mapped_column(sa.JSON(), nullable=True)
     default_syringe_type: Mapped[str | None] = mapped_column(String(10), nullable=True)
     default_syringe_ml: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    is_blend: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     user: Mapped["User"] = relationship("User", back_populates="compounds")
     injections: Mapped[list["Injection"]] = relationship(
@@ -64,6 +65,33 @@ class Compound(Base):
     )
     protocols: Mapped[list["Protocol"]] = relationship(
         "Protocol", back_populates="compound", cascade="all, delete-orphan"
+    )
+    blend_components: Mapped[list["BlendComponent"]] = relationship(
+        "BlendComponent",
+        foreign_keys="BlendComponent.compound_id",
+        back_populates="compound",
+        cascade="all, delete-orphan",
+        order_by="BlendComponent.position",
+    )
+
+
+class BlendComponent(Base):
+    __tablename__ = "blend_components"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    compound_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("compounds.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    linked_compound_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("compounds.id", ondelete="SET NULL"), nullable=True
+    )
+    amount_mg: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False)
+    is_anchor: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    compound: Mapped["Compound"] = relationship(
+        "Compound", foreign_keys=[compound_id], back_populates="blend_components"
     )
 
 
@@ -82,6 +110,9 @@ class Injection(Base):
     injected_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    draw_volume_ml: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    dose_mode: Mapped[str] = mapped_column(String(20), default="total", nullable=False)
+    component_snapshot: Mapped[list | None] = mapped_column(sa.JSON(), nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="injections")
     compound: Mapped["Compound"] = relationship("Compound", back_populates="injections")
@@ -103,6 +134,10 @@ class Protocol(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     last_fired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    dose_mode: Mapped[str] = mapped_column(String(20), default="total", nullable=False)
+    anchor_component_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("blend_components.id", ondelete="SET NULL"), nullable=True
+    )
 
     user: Mapped["User"] = relationship("User", back_populates="protocols")
     compound: Mapped["Compound"] = relationship("Compound", back_populates="protocols")

@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { calculate, type CalcResult, type SyringeType } from "@/lib/reconstitution";
+import {
+  calculate,
+  calculateBlend,
+  type BlendCalcResult,
+  type BlendComponentInput,
+  type CalcResult,
+  type SyringeType,
+} from "@/lib/reconstitution";
 import { type CompoundRead } from "@/lib/types";
 import SyringePreview from "@/components/SyringePreview";
 
@@ -93,7 +100,6 @@ export default function ReconstitutionCalculator({
   initialValues,
   compounds: compoundsProp,
 }: Props) {
-  // Compound list
   const [compounds, setCompounds] = useState<CompoundRead[]>(compoundsProp ?? []);
   const [selectedCompound, setSelectedCompound] = useState<CompoundRead | null>(
     initialCompound ?? null
@@ -118,20 +124,21 @@ export default function ReconstitutionCalculator({
     initialValues?.doseMcg ? String(initialValues.doseMcg) : ""
   );
   const [doseUnit, setDoseUnit] = useState<"mcg" | "mg">("mcg");
+  const [doseMode, setDoseMode] = useState<"total" | "anchor">("total");
   const [syringeType, setSyringeType] = useState<SyringeType>(
     (initialCompound?.default_syringe_type as SyringeType | null) ??
       initialValues?.syringeType ??
       "U100"
   );
   const [syringeMl, setSyringeMl] = useState(
-    initialCompound?.default_syringe_ml ??
-      initialValues?.syringeMl ??
-      1
+    initialCompound?.default_syringe_ml ?? initialValues?.syringeMl ?? 1
   );
 
   // Save-back state
   const [saving, setSaving] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
+
+  const isBlend = selectedCompound?.is_blend ?? false;
 
   // Fetch compounds if not provided
   useEffect(() => {
@@ -142,7 +149,7 @@ export default function ReconstitutionCalculator({
     }
   }, [compoundsProp]);
 
-  // When syringe type changes, clamp syringeMl to a valid size for that type
+  // Clamp syringe size when type changes
   useEffect(() => {
     const sizes = SYRINGE_SIZES[syringeType];
     if (!sizes.includes(syringeMl)) {
@@ -154,26 +161,48 @@ export default function ReconstitutionCalculator({
   // Derived values
   // ---------------------------------------------------------------------------
 
-  // Convert dose input to mcg for the calculation
   const doseMcgNum = (() => {
     const raw = parseFloat(doseMcg);
     if (isNaN(raw)) return 0;
     return doseUnit === "mg" ? raw * 1000 : raw;
   })();
 
-  const result: CalcResult | null = calculate({
-    vialMg: parseFloat(vialMg) || 0,
-    bacMl: parseFloat(bacMl) || 0,
-    doseMcg: doseMcgNum,
-    syringeType,
-    syringeMl,
-  });
+  // Blend-mode: total vial mg computed from components
+  const blendComponents: BlendComponentInput[] = isBlend
+    ? (selectedCompound?.blend_components ?? []).map((bc) => ({
+        name: bc.name,
+        amount_mg: bc.amount_mg,
+        is_anchor: bc.is_anchor,
+      }))
+    : [];
+  const blendTotalMg = blendComponents.reduce((s, c) => s + c.amount_mg, 0);
+  const anchorComponent = blendComponents.find((c) => c.is_anchor) ?? blendComponents[0];
 
-  // Show save-back button when inputs differ from the compound's saved values
+  const result: CalcResult | BlendCalcResult | null = isBlend
+    ? calculateBlend(
+        blendComponents,
+        parseFloat(bacMl) || 0,
+        doseMcgNum,
+        doseMode,
+        syringeType,
+        syringeMl
+      )
+    : calculate({
+        vialMg: parseFloat(vialMg) || 0,
+        bacMl: parseFloat(bacMl) || 0,
+        doseMcg: doseMcgNum,
+        syringeType,
+        syringeMl,
+      });
+
+  const blendResult = isBlend ? (result as BlendCalcResult | null) : null;
+
+  // Show save-back button when bac_water_ml differs from saved (for non-blend, also vial_size_mg)
   const showSaveBack =
     selectedCompound !== null &&
     !saving &&
     !saveToast &&
+    !isBlend &&
     (parseFloat(vialMg) !== Number(selectedCompound.vial_size_mg) ||
       parseFloat(bacMl) !== Number(selectedCompound.bac_water_ml));
 
@@ -190,8 +219,10 @@ export default function ReconstitutionCalculator({
     }
     const c = compounds.find((c) => String(c.id) === id) ?? null;
     setSelectedCompound(c);
+    setDoseMode("total");
+    setDoseMcg("");
     if (c) {
-      if (c.vial_size_mg) setVialMg(String(c.vial_size_mg));
+      if (!c.is_blend && c.vial_size_mg) setVialMg(String(c.vial_size_mg));
       if (c.bac_water_ml) setBacMl(String(c.bac_water_ml));
       if (c.default_syringe_type) setSyringeType(c.default_syringe_type as SyringeType);
       if (c.default_syringe_ml) setSyringeMl(Number(c.default_syringe_ml));
@@ -222,7 +253,7 @@ export default function ReconstitutionCalculator({
 
   return (
     <div className="space-y-6">
-      {/* Compound selector — full width */}
+      {/* Compound selector */}
       <div>
         <SectionLabel>Compound</SectionLabel>
         <select
@@ -233,44 +264,74 @@ export default function ReconstitutionCalculator({
           <option value="">Custom (no compound)</option>
           {compounds.map((c) => (
             <option key={c.id} value={String(c.id)}>
-              {c.name}
+              {c.name}{c.is_blend ? " (blend)" : ""}
             </option>
           ))}
         </select>
+        {isBlend && blendTotalMg > 0 && (
+          <p className="mt-1.5 text-sm text-purple-600 dark:text-purple-400">
+            Blend · {blendComponents.map((c) => `${c.name} ${c.amount_mg}mg`).join(" + ")} = {blendTotalMg}mg
+          </p>
+        )}
       </div>
 
-      {/* Two-column layout */}
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         {/* ── Left column: inputs ── */}
         <div className="flex-1 space-y-5">
-          {/* Vial size */}
-          <div>
-            <SectionLabel>Vial size</SectionLabel>
-            <div className="relative">
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={vialMg}
-                onChange={(e) => setVialMg(e.target.value)}
-                placeholder="e.g. 10"
-                className={`${inputCls} pr-12`}
-              />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 dark:text-gray-500">
-                mg
-              </span>
+
+          {/* Blend dose mode toggle */}
+          {isBlend && (
+            <div>
+              <SectionLabel>Dose mode</SectionLabel>
+              <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+                {(["total", "anchor"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => { setDoseMode(mode); setDoseMcg(""); }}
+                    className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                      doseMode === mode
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                    }`}
+                  >
+                    {mode === "total" ? "Total blend" : `By ${anchorComponent?.name ?? "anchor"}`}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {vialChips.map((v) => (
-                <Chip
-                  key={v}
-                  label={`${v} mg`}
-                  active={parseFloat(vialMg) === v}
-                  onClick={() => setVialMg(String(v))}
+          )}
+
+          {/* Vial size — hidden for blends (computed) */}
+          {!isBlend && (
+            <div>
+              <SectionLabel>Vial size</SectionLabel>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={vialMg}
+                  onChange={(e) => setVialMg(e.target.value)}
+                  placeholder="e.g. 10"
+                  className={`${inputCls} pr-12`}
                 />
-              ))}
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 dark:text-gray-500">
+                  mg
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {vialChips.map((v) => (
+                  <Chip
+                    key={v}
+                    label={`${v} mg`}
+                    active={parseFloat(vialMg) === v}
+                    onClick={() => setVialMg(String(v))}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* BAC water */}
           <div>
@@ -303,7 +364,13 @@ export default function ReconstitutionCalculator({
 
           {/* Dose */}
           <div>
-            <SectionLabel>Desired dose</SectionLabel>
+            <SectionLabel>
+              {isBlend && doseMode === "anchor" && anchorComponent
+                ? `${anchorComponent.name} dose`
+                : isBlend
+                ? "Total dose"
+                : "Desired dose"}
+            </SectionLabel>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <input
@@ -316,7 +383,6 @@ export default function ReconstitutionCalculator({
                   className={inputCls}
                 />
               </div>
-              {/* mcg/mg toggle */}
               <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
                 {(["mcg", "mg"] as const).map((u) => (
                   <button
@@ -372,7 +438,7 @@ export default function ReconstitutionCalculator({
             </div>
           </div>
 
-          {/* Save-back */}
+          {/* Save-back (non-blend only) */}
           {showSaveBack && (
             <button
               type="button"
@@ -396,7 +462,10 @@ export default function ReconstitutionCalculator({
             syringeType={syringeType}
             syringeMl={syringeMl}
             drawVolumeMl={result?.drawVolumeMl ?? 0}
-            totalMarkings={result?.totalMarkings ?? (syringeMl * (syringeType === "U100" ? 100 : syringeType === "U40" ? 40 : 1))}
+            totalMarkings={
+              result?.totalMarkings ??
+              syringeMl * (syringeType === "U100" ? 100 : syringeType === "U40" ? 40 : 1)
+            }
             markingValue={result?.markingValue ?? 0}
             markingUnit={result?.markingUnit ?? (syringeType === "TB" ? "mL" : "units")}
             warnings={result?.warnings ?? []}
@@ -428,6 +497,30 @@ export default function ReconstitutionCalculator({
             </p>
           </div>
         </div>
+
+        {/* Blend per-component breakdown */}
+        {blendResult && blendResult.componentBreakdown.length > 0 && (
+          <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-800">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+              Per component
+            </p>
+            <div className="space-y-1.5">
+              {blendResult.componentBreakdown.map((comp) => (
+                <div key={comp.name} className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    {comp.name}
+                    {comp.is_anchor && (
+                      <span className="ml-1 text-xs text-blue-500">(anchor)</span>
+                    )}
+                  </span>
+                  <span className="tabular-nums font-medium text-gray-900 dark:text-white">
+                    {comp.dose_mcg.toLocaleString()} mcg
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculate, getTicks, mlToMarking, totalMarkings } from "./reconstitution";
+import { calculate, calculateBlend, getTicks, mlToMarking, totalMarkings } from "./reconstitution";
 
 // ---------------------------------------------------------------------------
 // Spec scenarios
@@ -116,6 +116,65 @@ describe("totalMarkings", () => {
   it("U40 1 mL → 40", () => expect(totalMarkings("U40", 1)).toBe(40));
   it("U40 0.5 mL → 20", () => expect(totalMarkings("U40", 0.5)).toBe(20));
   it("TB 1 mL → 1", () => expect(totalMarkings("TB", 1)).toBe(1));
+});
+
+// ---------------------------------------------------------------------------
+// Blend calculation (GLOW scenario)
+// ---------------------------------------------------------------------------
+
+describe("calculateBlend — GLOW anchor mode", () => {
+  // GHK-Cu 50mg + TB-500 10mg + BPC-157 10mg (anchor) + 2mL BAC
+  // Anchor dose: 250 mcg BPC-157
+  const components = [
+    { name: "GHK-Cu", amount_mg: 50, is_anchor: false },
+    { name: "TB-500", amount_mg: 10, is_anchor: false },
+    { name: "BPC-157", amount_mg: 10, is_anchor: true },
+  ];
+  const result = calculateBlend(components, 2, 250, "anchor", "U100", 1);
+
+  it("returns a result", () => expect(result).not.toBeNull());
+  it("total amount = 70 mg", () => expect(result!.totalAmountMg).toBe(70));
+  it("concentration = 35 mg/mL", () => expect(result!.concentrationMgPerMl).toBe(35));
+  it("draw volume = 0.05 mL", () => expect(result!.drawVolumeMl).toBeCloseTo(0.05, 6));
+  it("marking = 5 units (U-100)", () => expect(result!.markingValue).toBeCloseTo(5, 6));
+  it("doses per vial = 40", () => expect(result!.dosesPerVial).toBe(40));
+  it("GHK-Cu dose ≈ 1250 mcg", () => {
+    const ghk = result!.componentBreakdown.find((c) => c.name === "GHK-Cu");
+    expect(ghk!.dose_mcg).toBe(1250);
+  });
+  it("TB-500 dose = 250 mcg", () => {
+    const tb = result!.componentBreakdown.find((c) => c.name === "TB-500");
+    expect(tb!.dose_mcg).toBe(250);
+  });
+  it("BPC-157 dose = 250 mcg", () => {
+    const bpc = result!.componentBreakdown.find((c) => c.name === "BPC-157");
+    expect(bpc!.dose_mcg).toBe(250);
+  });
+  it("no warnings", () => expect(result!.warnings).toHaveLength(0));
+});
+
+describe("calculateBlend — total mode", () => {
+  // Same GLOW blend but using total dose = 1750 mcg
+  const components = [
+    { name: "GHK-Cu", amount_mg: 50, is_anchor: false },
+    { name: "TB-500", amount_mg: 10, is_anchor: false },
+    { name: "BPC-157", amount_mg: 10, is_anchor: true },
+  ];
+  const result = calculateBlend(components, 2, 1750, "total", "U100", 1);
+
+  it("returns a result", () => expect(result).not.toBeNull());
+  it("draw volume = 0.05 mL", () => expect(result!.drawVolumeMl).toBeCloseTo(0.05, 6));
+  it("GHK-Cu dose ≈ 1250 mcg", () => {
+    const ghk = result!.componentBreakdown.find((c) => c.name === "GHK-Cu");
+    expect(ghk!.dose_mcg).toBe(1250);
+  });
+});
+
+describe("calculateBlend — null cases", () => {
+  const comp = [{ name: "A", amount_mg: 10, is_anchor: true }];
+  it("no components returns null", () => expect(calculateBlend([], 2, 250, "total")).toBeNull());
+  it("zero bacMl returns null", () => expect(calculateBlend(comp, 0, 250, "total")).toBeNull());
+  it("zero dose returns null", () => expect(calculateBlend(comp, 2, 0, "total")).toBeNull());
 });
 
 // ---------------------------------------------------------------------------

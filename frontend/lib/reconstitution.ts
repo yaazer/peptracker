@@ -98,6 +98,104 @@ export function calculate(input: Partial<CalcInput>): CalcResult | null {
 }
 
 // ---------------------------------------------------------------------------
+// Blend calculation
+// ---------------------------------------------------------------------------
+
+export interface BlendComponentInput {
+  name: string;
+  amount_mg: number;
+  is_anchor: boolean;
+}
+
+export interface ComponentBreakdown {
+  name: string;
+  amount_mg: number;
+  dose_mcg: number;
+  fraction: number;
+  is_anchor: boolean;
+}
+
+export interface BlendCalcResult extends CalcResult {
+  componentBreakdown: ComponentBreakdown[];
+  totalAmountMg: number;
+}
+
+/**
+ * Calculate reconstitution and per-component doses for a blend compound.
+ * @param components - list of blend components
+ * @param bacMl - BAC water volume in mL
+ * @param doseMcg - dose for anchor (anchor mode) or total (total mode)
+ * @param doseMode - "total" or "anchor"
+ * @param syringeType - syringe type
+ * @param syringeMl - syringe capacity in mL
+ */
+export function calculateBlend(
+  components: BlendComponentInput[],
+  bacMl: number,
+  doseMcg: number,
+  doseMode: "total" | "anchor",
+  syringeType: SyringeType = "U100",
+  syringeMl: number = 1
+): BlendCalcResult | null {
+  if (!components.length || !bacMl || !doseMcg) return null;
+
+  const totalAmountMg = components.reduce((s, c) => s + c.amount_mg, 0);
+  if (!totalAmountMg) return null;
+
+  const concentrationMgPerMl = totalAmountMg / bacMl;
+  let totalDoseMcg: number;
+  let drawVolumeMl: number;
+
+  if (doseMode === "anchor") {
+    const anchor = components.find((c) => c.is_anchor) ?? components[0];
+    const anchorConc = anchor.amount_mg / bacMl;
+    if (!anchorConc) return null;
+    drawVolumeMl = doseMcg / 1000 / anchorConc;
+    const anchorFraction = anchor.amount_mg / totalAmountMg;
+    totalDoseMcg = doseMcg / anchorFraction;
+  } else {
+    drawVolumeMl = doseMcg / 1000 / concentrationMgPerMl;
+    totalDoseMcg = doseMcg;
+  }
+
+  const dosesPerVial = Math.floor((totalAmountMg * 1000) / totalDoseMcg);
+  const markingVal = mlToMarking(syringeType, drawVolumeMl);
+  const total = totalMarkings(syringeType, syringeMl);
+  const unit = markingUnit(syringeType);
+  const overCapacity = drawVolumeMl > syringeMl;
+  const overdose = totalDoseMcg > totalAmountMg * 1000;
+
+  const warnings: string[] = [];
+  if (overCapacity) warnings.push(`Dose too large for ${syringeMl} mL syringe — select a larger size`);
+  if (overdose) warnings.push("Requested dose exceeds full vial contents");
+
+  const componentBreakdown: ComponentBreakdown[] = components.map((c) => {
+    const fraction = c.amount_mg / totalAmountMg;
+    return {
+      name: c.name,
+      amount_mg: c.amount_mg,
+      dose_mcg: Math.round(totalDoseMcg * fraction),
+      fraction,
+      is_anchor: c.is_anchor,
+    };
+  });
+
+  return {
+    concentrationMgPerMl,
+    drawVolumeMl,
+    dosesPerVial,
+    markingValue: markingVal,
+    markingUnit: unit,
+    totalMarkings: total,
+    overCapacity,
+    overdose,
+    warnings,
+    componentBreakdown,
+    totalAmountMg,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Tick generation for SVG
 // ---------------------------------------------------------------------------
 

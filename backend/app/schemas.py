@@ -36,6 +36,29 @@ class UserUpdate(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Blend component
+# ---------------------------------------------------------------------------
+
+class BlendComponentCreate(BaseModel):
+    name: str
+    linked_compound_id: int | None = None
+    amount_mg: float
+    is_anchor: bool = False
+    position: int = 0
+
+
+class BlendComponentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    linked_compound_id: int | None
+    amount_mg: float
+    is_anchor: bool
+    position: int
+
+
+# ---------------------------------------------------------------------------
 # Compound
 # ---------------------------------------------------------------------------
 
@@ -49,6 +72,8 @@ class CompoundCreate(BaseModel):
     preset_vial_sizes: list[float] | None = None
     default_syringe_type: str | None = None
     default_syringe_ml: float | None = None
+    is_blend: bool = False
+    blend_components: list[BlendComponentCreate] | None = None
 
 
 class CompoundUpdate(BaseModel):
@@ -61,6 +86,8 @@ class CompoundUpdate(BaseModel):
     preset_vial_sizes: list[float] | None = None
     default_syringe_type: str | None = None
     default_syringe_ml: float | None = None
+    is_blend: bool | None = None
+    blend_components: list[BlendComponentCreate] | None = None
 
 
 class CompoundRead(BaseModel):
@@ -78,6 +105,8 @@ class CompoundRead(BaseModel):
     preset_vial_sizes: list[float] | None
     default_syringe_type: str | None
     default_syringe_ml: float | None
+    is_blend: bool
+    blend_components: list[BlendComponentRead]
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +119,7 @@ class InjectionCreate(BaseModel):
     injection_site: InjectionSite
     injected_at: datetime
     notes: str | None = None
+    dose_mode: str = "total"
 
 
 class InjectionUpdate(BaseModel):
@@ -111,6 +141,9 @@ class InjectionRead(BaseModel):
     injected_at: datetime
     notes: str | None
     created_at: datetime
+    draw_volume_ml: float | None
+    dose_mode: str
+    component_snapshot: list | None
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +156,8 @@ class ProtocolCreate(BaseModel):
     schedule_cron: str
     active: bool = True
     notes: str | None = None
+    dose_mode: str = "total"
+    anchor_component_id: int | None = None
 
 
 class ProtocolUpdate(BaseModel):
@@ -131,6 +166,8 @@ class ProtocolUpdate(BaseModel):
     schedule_cron: str | None = None
     active: bool | None = None
     notes: str | None = None
+    dose_mode: str | None = None
+    anchor_component_id: int | None = None
 
 
 class ProtocolRead(BaseModel):
@@ -147,6 +184,8 @@ class ProtocolRead(BaseModel):
     created_at: datetime
     last_fired_at: datetime | None
     next_fire_at: datetime | None
+    dose_mode: str
+    anchor_component_id: int | None
 
 
 # ---------------------------------------------------------------------------

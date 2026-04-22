@@ -38,6 +38,8 @@ def _to_read(p: Protocol) -> ProtocolRead:
         created_at=p.created_at,
         last_fired_at=p.last_fired_at,
         next_fire_at=next_fire,
+        dose_mode=p.dose_mode,
+        anchor_component_id=p.anchor_component_id,
     )
 
 
@@ -84,6 +86,8 @@ def create_protocol(
         schedule_cron=body.schedule_cron,
         active=body.active,
         notes=body.notes,
+        dose_mode=body.dose_mode,
+        anchor_component_id=body.anchor_component_id,
     )
     db.add(p)
     db.commit()
