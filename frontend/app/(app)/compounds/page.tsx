@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Archive, ArchiveRestore, Pencil, Plus, Trash2 } from "@/components/icons";
+import Link from "next/link";
+import { Archive, ArchiveRestore, Calculator, Pencil, Plus, Trash2 } from "@/components/icons";
 import { apiFetch } from "@/lib/api";
 import { CompoundRead } from "@/lib/types";
 
@@ -112,12 +113,20 @@ export default function CompoundsPage() {
     <div className="px-4 pt-6">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Compounds</h1>
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"
-        >
-          <Plus size={16} /> Add
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/calculator"
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            <Calculator size={15} /> Calc
+          </Link>
+          <button
+            onClick={openAdd}
+            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"
+          >
+            <Plus size={16} /> Add
+          </button>
+        </div>
       </div>
 
       <label className="mb-4 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
@@ -155,6 +164,13 @@ export default function CompoundsPage() {
                 )}
               </div>
               <div className="flex shrink-0 gap-1">
+                <Link
+                  href={`/calculator?compound_id=${c.id}`}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+                  title="Reconstitution calculator"
+                >
+                  <Calculator size={16} />
+                </Link>
                 <button
                   onClick={() => openEdit(c)}
                   className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"

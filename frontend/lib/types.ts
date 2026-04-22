@@ -8,6 +8,9 @@ export interface CompoundRead {
   notes: string | null;
   created_at: string;
   archived: boolean;
+  preset_vial_sizes: number[] | null;
+  default_syringe_type: string | null;
+  default_syringe_ml: number | null;
 }
 
 export interface InjectionRead {

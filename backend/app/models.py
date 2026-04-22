@@ -1,6 +1,7 @@
 import enum
 from datetime import datetime
 
+import sqlalchemy as sa
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -53,6 +54,9 @@ class Compound(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    preset_vial_sizes: Mapped[list | None] = mapped_column(sa.JSON(), nullable=True)
+    default_syringe_type: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    default_syringe_ml: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="compounds")
     injections: Mapped[list["Injection"]] = relationship(

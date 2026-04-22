@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Clock, FlaskConical, Home, Plus } from "@/components/icons";
+import { Bell, Calculator, Clock, FlaskConical, Home } from "@/components/icons";
 
 const tabs = [
-  { href: "/dashboard", label: "Home", Icon: Home },
-  { href: "/log", label: "Log", Icon: Plus },
-  { href: "/history", label: "History", Icon: Clock },
-  { href: "/compounds", label: "Compounds", Icon: FlaskConical },
-  { href: "/protocols", label: "Protocols", Icon: Bell },
+  { href: "/dashboard",   label: "Home",       Icon: Home },
+  { href: "/calculator",  label: "Calc",       Icon: Calculator },
+  { href: "/history",     label: "History",    Icon: Clock },
+  { href: "/compounds",   label: "Compounds",  Icon: FlaskConical },
+  { href: "/protocols",   label: "Protocols",  Icon: Bell },
 ];
 
 export default function BottomNav() {

@@ -46,6 +46,9 @@ class CompoundCreate(BaseModel):
     bac_water_ml: Decimal | None = None
     notes: str | None = None
     archived: bool = False
+    preset_vial_sizes: list[float] | None = None
+    default_syringe_type: str | None = None
+    default_syringe_ml: float | None = None
 
 
 class CompoundUpdate(BaseModel):
@@ -55,6 +58,9 @@ class CompoundUpdate(BaseModel):
     bac_water_ml: Decimal | None = None
     notes: str | None = None
     archived: bool | None = None
+    preset_vial_sizes: list[float] | None = None
+    default_syringe_type: str | None = None
+    default_syringe_ml: float | None = None
 
 
 class CompoundRead(BaseModel):
@@ -69,6 +75,9 @@ class CompoundRead(BaseModel):
     notes: str | None
     created_at: datetime
     archived: bool
+    preset_vial_sizes: list[float] | None
+    default_syringe_type: str | None
+    default_syringe_ml: float | None
 
 
 # ---------------------------------------------------------------------------
