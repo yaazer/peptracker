@@ -195,6 +195,7 @@ def get_dashboard(
     thirty_ago = now - timedelta(days=30)
     timeline_rows = (
         db.query(Injection)
+        .options(joinedload(Injection.injector))
         .filter(Injection.injected_at >= thirty_ago)
         .all()
     )
@@ -207,21 +208,36 @@ def get_dashboard(
             compound_cache[cid] = c.name if c else f"Compound #{cid}"
         return compound_cache[cid]
 
-    tl_map: dict[tuple, dict] = defaultdict(lambda: {"total_mcg": 0, "count": 0})
+    # key: (date, user_id, compound_id, compound_name)
+    tl_map: dict[tuple, dict] = {}
     for inj in timeline_rows:
         date_str = inj.injected_at.strftime("%Y-%m-%d")
+        user_id = inj.injected_by_user_id
+        user_name = inj.injector.name if inj.injector else "Unknown"
         if inj.component_snapshot:
             for comp in inj.component_snapshot:
-                key = (date_str, inj.compound_id, comp["name"])
+                key = (date_str, user_id, inj.compound_id, comp["name"])
+                if key not in tl_map:
+                    tl_map[key] = {"total_mcg": 0, "count": 0, "user_name": user_name}
                 tl_map[key]["total_mcg"] += comp["dose_mcg"]
                 tl_map[key]["count"] += 1
         else:
-            key = (date_str, inj.compound_id, compound_name(inj.compound_id))
+            key = (date_str, user_id, inj.compound_id, compound_name(inj.compound_id))
+            if key not in tl_map:
+                tl_map[key] = {"total_mcg": 0, "count": 0, "user_name": user_name}
             tl_map[key]["total_mcg"] += inj.dose_mcg
             tl_map[key]["count"] += 1
 
     timeline = [
-        TimelinePoint(date=k[0], compound_id=k[1], compound_name=k[2], **v)
+        TimelinePoint(
+            date=k[0],
+            user_id=k[1],
+            compound_id=k[2],
+            compound_name=k[3],
+            user_name=v["user_name"],
+            total_mcg=v["total_mcg"],
+            count=v["count"],
+        )
         for k, v in sorted(tl_map.items())
     ]
 

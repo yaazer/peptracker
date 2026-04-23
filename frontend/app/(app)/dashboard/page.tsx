@@ -208,9 +208,8 @@ export default function DashboardPage() {
       {/* 30-day timeline chart */}
       {data && (
         <section>
-          <SectionTitle>30-day timeline</SectionTitle>
           <Card className="overflow-hidden">
-            <DashboardChart data={data.timeline} />
+            <DashboardChart data={data.timeline} householdUsers={householdUsers} />
           </Card>
         </section>
       )}

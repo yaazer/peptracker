@@ -323,6 +323,8 @@ class TimelinePoint(BaseModel):
     date: str
     compound_id: int
     compound_name: str
+    user_id: int
+    user_name: str
     total_mcg: int
     count: int
 

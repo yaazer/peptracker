@@ -198,6 +198,8 @@ export interface TimelinePoint {
   date: string;
   compound_id: number;
   compound_name: string;
+  user_id: number;
+  user_name: string;
   total_mcg: number;
   count: number;
 }
