@@ -4,14 +4,24 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Trash2 } from "@/components/icons";
 import { apiFetch } from "@/lib/api";
-import { CompoundRead, InjectionRead, formatDatetime, siteLabel } from "@/lib/types";
+import { CompoundRead, HouseholdUser, InjectionRead, formatDatetime, siteLabel } from "@/lib/types";
+import UserAttributionChip from "@/components/UserAttributionChip";
+import { useAuth } from "@/context/AuthContext";
+
+type FilterMode = "all" | "mine" | "person";
 
 export default function HistoryPage() {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
+
   const [injections, setInjections] = useState<InjectionRead[]>([]);
   const [compounds, setCompounds] = useState<CompoundRead[]>([]);
+  const [householdUsers, setHouseholdUsers] = useState<HouseholdUser[]>([]);
   const [filterCompound, setFilterCompound] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [filterMode, setFilterMode] = useState<FilterMode>("all");
+  const [filterPersonId, setFilterPersonId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
@@ -26,6 +36,9 @@ export default function HistoryPage() {
       to.setHours(23, 59, 59, 999);
       params.set("to", to.toISOString());
     }
+    if (filterMode === "person" && filterPersonId) {
+      params.set("injected_by", filterPersonId);
+    }
     const res = await apiFetch(`/api/injections?${params}`);
     if (res.ok) setInjections(await res.json());
   };
@@ -33,20 +46,27 @@ export default function HistoryPage() {
   useEffect(() => {
     Promise.all([
       apiFetch("/api/compounds?include_archived=true").then((r) => r.json()),
-    ]).then(([cs]) => {
+      apiFetch("/api/users/household").then((r) => (r.ok ? r.json() : [])),
+    ]).then(([cs, us]) => {
       setCompounds(cs);
+      setHouseholdUsers(us);
       setLoading(false);
     });
   }, []);
 
   useEffect(() => {
     if (!loading) loadInjections();
-  }, [loading, filterCompound, filterFrom, filterTo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, filterCompound, filterFrom, filterTo, filterMode, filterPersonId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const canDelete = (inj: InjectionRead) =>
+    isAdmin || inj.logged_by_user_id === currentUser?.id;
 
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this injection record?")) return;
-    await apiFetch(`/api/injections/${id}`, { method: "DELETE" });
-    setInjections((prev) => prev.filter((i) => i.id !== id));
+    const res = await apiFetch(`/api/injections/${id}`, { method: "DELETE" });
+    if (res.ok || res.status === 204) {
+      setInjections((prev) => prev.filter((i) => i.id !== id));
+    }
   };
 
   const toggleExpanded = (id: number) => {
@@ -58,6 +78,15 @@ export default function HistoryPage() {
     });
   };
 
+  const visibleInjections =
+    filterMode === "mine" && currentUser
+      ? injections.filter(
+          (i) =>
+            i.injected_by_user_id === currentUser.id ||
+            i.logged_by_user_id === currentUser.id
+        )
+      : injections;
+
   const inputCls =
     "w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white";
 
@@ -65,7 +94,38 @@ export default function HistoryPage() {
     <div className="px-4 pt-6">
       <h1 className="mb-4 text-xl font-bold text-gray-900 dark:text-white">History</h1>
 
-      {/* Filters */}
+      {/* Person filter */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+          {(["all", "mine", "person"] as FilterMode[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => setFilterMode(m)}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                filterMode === m
+                  ? "bg-blue-600 text-white"
+                  : "bg-white text-gray-600 dark:bg-gray-900 dark:text-gray-400"
+              }`}
+            >
+              {m === "all" ? "All" : m === "mine" ? "Mine" : "By person"}
+            </button>
+          ))}
+        </div>
+        {filterMode === "person" && (
+          <select
+            value={filterPersonId}
+            onChange={(e) => setFilterPersonId(e.target.value)}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+          >
+            <option value="">Select person…</option>
+            {householdUsers.map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* Compound / date filters */}
       <div className="mb-4 space-y-2">
         <select
           value={filterCompound}
@@ -114,7 +174,7 @@ export default function HistoryPage() {
       </div>
 
       {/* List */}
-      {injections.length === 0 ? (
+      {visibleInjections.length === 0 ? (
         <div className="mt-16 text-center">
           <p className="text-gray-400 dark:text-gray-500">No injections found.</p>
           <Link href="/log" className="mt-2 block text-sm text-blue-600">
@@ -123,10 +183,11 @@ export default function HistoryPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {injections.map((inj) => {
+          {visibleInjections.map((inj) => {
             const compound = compoundMap[inj.compound_id];
             const hasSnapshot = inj.component_snapshot && inj.component_snapshot.length > 0;
             const isOpen = expanded.has(inj.id);
+            const crossUser = inj.injected_by_user_id !== inj.logged_by_user_id;
 
             return (
               <div
@@ -135,6 +196,20 @@ export default function HistoryPage() {
               >
                 <div className="flex items-start justify-between gap-2 p-4">
                   <div className="min-w-0 flex-1">
+                    {/* Attribution — always first */}
+                    <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                      <UserAttributionChip
+                        userId={inj.injected_by_user_id}
+                        userName={inj.injector_name}
+                        size="sm"
+                      />
+                      {crossUser && (
+                        <span className="text-xs text-gray-400 dark:text-gray-500">
+                          (logged by {inj.logger_name})
+                        </span>
+                      )}
+                    </div>
+
                     <div className="flex items-baseline gap-2">
                       <span className="font-semibold text-gray-900 dark:text-white">
                         {compound?.name ?? `Compound #${inj.compound_id}`}
@@ -171,15 +246,16 @@ export default function HistoryPage() {
                       </button>
                     )}
                   </div>
-                  <button
-                    onClick={() => handleDelete(inj.id)}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500 dark:text-gray-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  {canDelete(inj) && (
+                    <button
+                      onClick={() => handleDelete(inj.id)}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500 dark:text-gray-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
 
-                {/* Blend component breakdown */}
                 {hasSnapshot && isOpen && (
                   <div className="border-t border-gray-100 px-4 pb-3 pt-2 dark:border-gray-800">
                     <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">

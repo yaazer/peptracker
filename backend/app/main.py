@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.routers import auth, compounds, dashboard, health, injections, protocols, profile, reminders
+from app.routers import auth, compounds, dashboard, health, injections, protocols, profile, reminders, users
 from app.scheduler import scheduler
 
 
@@ -13,7 +13,7 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="peptracker", lifespan=lifespan)
+app = FastAPI(title="PepTracker v1", lifespan=lifespan)
 
 app.include_router(health.router)
 app.include_router(auth.router)
@@ -23,3 +23,4 @@ app.include_router(dashboard.router)
 app.include_router(protocols.router)
 app.include_router(profile.router)
 app.include_router(reminders.router)
+app.include_router(users.router)

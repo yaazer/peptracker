@@ -14,6 +14,9 @@ export interface UserRead {
   email: string;
   name: string;
   created_at: string;
+  role: "admin" | "member";
+  force_password_change: boolean;
+  last_login_at: string | null;
 }
 
 interface AuthContextValue {
@@ -22,6 +25,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -29,6 +33,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserRead | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const refreshUser = async () => {
+    const res = await apiFetch("/api/auth/me");
+    setUser(res.ok ? await res.json() : null);
+  };
 
   useEffect(() => {
     apiFetch("/api/auth/me")
@@ -67,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, register }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, register, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -44,10 +44,13 @@ def register(body: UserCreate, response: Response, db: Session = Depends(get_db)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Registration is disabled")
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+
+    is_first_user = db.query(User).count() == 0
     user = User(
         email=body.email,
         hashed_password=pwd_context.hash(body.password),
         name=body.name,
+        role="admin" if is_first_user else "member",
     )
     db.add(user)
     db.commit()
@@ -61,6 +64,11 @@ def login(body: LoginRequest, response: Response, db: Session = Depends(get_db))
     user = db.query(User).filter(User.email == body.email).first()
     if not user or not pwd_context.verify(body.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    if user.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account deactivated")
+    user.last_login_at = datetime.utcnow()
+    db.commit()
+    db.refresh(user)
     _set_auth_cookie(response, _create_token(user.id))
     return user
 

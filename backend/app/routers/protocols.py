@@ -2,8 +2,9 @@ from datetime import datetime, timezone
 
 from croniter import croniter
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
+from app.auth.permissions import require_admin_or_assignee
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Compound, Protocol, User
@@ -28,7 +29,9 @@ def _to_read(p: Protocol) -> ProtocolRead:
     next_fire = _next_fire(p.schedule_cron, anchor)
     return ProtocolRead(
         id=p.id,
-        user_id=p.user_id,
+        assignee_user_id=p.assignee_user_id,
+        assignee_name=p.assignee.name if p.assignee else "Unknown",
+        created_by_user_id=p.created_by_user_id,
         compound_id=p.compound_id,
         compound_name=p.compound.name,
         dose_mcg=p.dose_mcg,
@@ -43,12 +46,15 @@ def _to_read(p: Protocol) -> ProtocolRead:
     )
 
 
-def _get_owned(protocol_id: int, user: User, db: Session) -> Protocol:
-    p = db.query(Protocol).filter(Protocol.id == protocol_id).first()
+def _load_protocol(protocol_id: int, db: Session) -> Protocol:
+    p = (
+        db.query(Protocol)
+        .options(joinedload(Protocol.assignee), joinedload(Protocol.compound))
+        .filter(Protocol.id == protocol_id)
+        .first()
+    )
     if not p:
         raise HTTPException(404, "Protocol not found")
-    if p.user_id != user.id:
-        raise HTTPException(403, "Not your protocol")
     return p
 
 
@@ -58,7 +64,10 @@ def list_protocols(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Protocol).filter(Protocol.user_id == user.id)
+    q = (
+        db.query(Protocol)
+        .options(joinedload(Protocol.assignee), joinedload(Protocol.compound))
+    )
     if not include_inactive:
         q = q.filter(Protocol.active == True)  # noqa: E712
     return [_to_read(p) for p in q.order_by(Protocol.created_at).all()]
@@ -73,14 +82,24 @@ def create_protocol(
     if not croniter.is_valid(body.schedule_cron):
         raise HTTPException(422, "Invalid cron expression")
 
-    compound = db.query(Compound).filter(
-        Compound.id == body.compound_id, Compound.user_id == user.id
-    ).first()
+    compound = db.query(Compound).filter(Compound.id == body.compound_id).first()
     if not compound:
         raise HTTPException(404, "Compound not found")
 
+    # Determine assignee: admins may specify any user, members are forced to self
+    if user.role == "admin" and body.assignee_user_id is not None:
+        assignee_id = body.assignee_user_id
+        assignee = db.get(User, assignee_id)
+        if not assignee or assignee.deleted_at is not None:
+            raise HTTPException(404, "Assignee user not found")
+    else:
+        if body.assignee_user_id is not None and body.assignee_user_id != user.id:
+            raise HTTPException(403, "Members can only create protocols assigned to themselves")
+        assignee_id = user.id
+
     p = Protocol(
-        user_id=user.id,
+        assignee_user_id=assignee_id,
+        created_by_user_id=user.id,
         compound_id=body.compound_id,
         dose_mcg=body.dose_mcg,
         schedule_cron=body.schedule_cron,
@@ -92,7 +111,7 @@ def create_protocol(
     db.add(p)
     db.commit()
     db.refresh(p)
-    return _to_read(p)
+    return _to_read(_load_protocol(p.id, db))
 
 
 @router.patch("/{protocol_id}", response_model=ProtocolRead)
@@ -102,17 +121,29 @@ def update_protocol(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    p = _get_owned(protocol_id, user, db)
+    # Inline permission check (can't use factory dependency cleanly with body)
+    p = _load_protocol(protocol_id, db)
+    if user.role != "admin" and user.id != p.assignee_user_id:
+        raise HTTPException(403, "Only the assignee or an admin can modify this protocol")
 
     data = body.model_dump(exclude_unset=True)
     if "schedule_cron" in data and not croniter.is_valid(data["schedule_cron"]):
         raise HTTPException(422, "Invalid cron expression")
 
+    # Members cannot change the assignee
+    if "assignee_user_id" in data and user.role != "admin":
+        raise HTTPException(403, "Only admins can reassign a protocol")
+
+    if "assignee_user_id" in data and data["assignee_user_id"] is not None:
+        assignee = db.get(User, data["assignee_user_id"])
+        if not assignee or assignee.deleted_at is not None:
+            raise HTTPException(404, "Assignee user not found")
+
     for field, value in data.items():
         setattr(p, field, value)
     db.commit()
     db.refresh(p)
-    return _to_read(p)
+    return _to_read(_load_protocol(p.id, db))
 
 
 @router.delete("/{protocol_id}", status_code=204)
@@ -121,6 +152,8 @@ def delete_protocol(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    p = _get_owned(protocol_id, user, db)
+    p = _load_protocol(protocol_id, db)
+    if user.role != "admin" and user.id != p.assignee_user_id:
+        raise HTTPException(403, "Only the assignee or an admin can delete this protocol")
     db.delete(p)
     db.commit()

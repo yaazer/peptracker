@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -12,19 +12,40 @@ from app.schemas import InjectionCreate, InjectionRead, InjectionUpdate
 router = APIRouter(prefix="/api/injections", tags=["injections"])
 
 
-def _get_owned_injection(injection_id: int, user: User, db: Session) -> Injection:
-    injection = db.get(Injection, injection_id)
-    if injection is None:
+def _injection_to_read(inj: Injection) -> InjectionRead:
+    return InjectionRead(
+        id=inj.id,
+        logged_by_user_id=inj.logged_by_user_id,
+        injected_by_user_id=inj.injected_by_user_id,
+        compound_id=inj.compound_id,
+        dose_mcg=inj.dose_mcg,
+        injection_site=inj.injection_site,
+        injected_at=inj.injected_at,
+        notes=inj.notes,
+        created_at=inj.created_at,
+        draw_volume_ml=inj.draw_volume_ml,
+        dose_mode=inj.dose_mode,
+        component_snapshot=inj.component_snapshot,
+        logger_name=inj.logger.name if inj.logger else "Unknown",
+        injector_name=inj.injector.name if inj.injector else "Unknown",
+    )
+
+
+def _load_injection(injection_id: int, db: Session) -> Injection:
+    inj = (
+        db.query(Injection)
+        .options(joinedload(Injection.logger), joinedload(Injection.injector))
+        .filter(Injection.id == injection_id)
+        .first()
+    )
+    if inj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Injection not found")
-    if injection.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your injection")
-    return injection
+    return inj
 
 
 def _compute_blend_data(
     compound: Compound, dose_mcg: int, dose_mode: str
 ) -> tuple[float | None, list | None]:
-    """Return (draw_volume_ml, component_snapshot) for a blend compound."""
     components = sorted(compound.blend_components, key=lambda c: c.position)
     if not components:
         return None, None
@@ -62,17 +83,23 @@ def list_injections(
     compound_id: Optional[int] = None,
     from_: Optional[datetime] = Query(None, alias="from"),
     to: Optional[datetime] = None,
+    injected_by: Optional[int] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Injection).filter(Injection.user_id == current_user.id)
+    q = (
+        db.query(Injection)
+        .options(joinedload(Injection.logger), joinedload(Injection.injector))
+    )
     if compound_id is not None:
         q = q.filter(Injection.compound_id == compound_id)
     if from_ is not None:
         q = q.filter(Injection.injected_at >= from_)
     if to is not None:
         q = q.filter(Injection.injected_at <= to)
-    return q.order_by(Injection.injected_at.desc()).all()
+    if injected_by is not None:
+        q = q.filter(Injection.injected_by_user_id == injected_by)
+    return [_injection_to_read(i) for i in q.order_by(Injection.injected_at.desc()).all()]
 
 
 @router.post("", response_model=InjectionRead, status_code=status.HTTP_201_CREATED)
@@ -87,8 +114,19 @@ def create_injection(
         .filter(Compound.id == body.compound_id)
         .first()
     )
-    if compound is None or compound.user_id != current_user.id:
+    if compound is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compound not found")
+
+    # Resolve who physically received the injection
+    if body.injected_by_user_id is not None and body.injected_by_user_id != current_user.id:
+        injector = db.get(User, body.injected_by_user_id)
+        if not injector or injector.deleted_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Injected-by user not found"
+            )
+        injected_by_id = body.injected_by_user_id
+    else:
+        injected_by_id = current_user.id
 
     draw_volume_ml: float | None = None
     component_snapshot: list | None = None
@@ -103,7 +141,8 @@ def create_injection(
             draw_volume_ml = body.dose_mcg / 1000.0 / conc
 
     injection = Injection(
-        user_id=current_user.id,
+        logged_by_user_id=current_user.id,
+        injected_by_user_id=injected_by_id,
         compound_id=body.compound_id,
         dose_mcg=body.dose_mcg,
         injection_site=body.injection_site,
@@ -116,7 +155,7 @@ def create_injection(
     db.add(injection)
     db.commit()
     db.refresh(injection)
-    return injection
+    return _injection_to_read(_load_injection(injection.id, db))
 
 
 @router.patch("/{injection_id}", response_model=InjectionRead)
@@ -126,12 +165,14 @@ def update_injection(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    injection = _get_owned_injection(injection_id, current_user, db)
+    inj = _load_injection(injection_id, db)
+    if current_user.role != "admin" and current_user.id != inj.logged_by_user_id:
+        raise HTTPException(403, "Only the logger or an admin can modify this injection")
     for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(injection, field, value)
+        setattr(inj, field, value)
     db.commit()
-    db.refresh(injection)
-    return injection
+    db.refresh(inj)
+    return _injection_to_read(_load_injection(inj.id, db))
 
 
 @router.delete("/{injection_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -140,6 +181,8 @@ def delete_injection(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    injection = _get_owned_injection(injection_id, current_user, db)
-    db.delete(injection)
+    inj = _load_injection(injection_id, db)
+    if current_user.role != "admin" and current_user.id != inj.logged_by_user_id:
+        raise HTTPException(403, "Only the logger or an admin can delete this injection")
+    db.delete(inj)
     db.commit()

@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Bell, Pencil, Plus, Trash2 } from "@/components/icons";
 import { apiFetch } from "@/lib/api";
-import { CompoundRead, ProtocolRead, timeUntil } from "@/lib/types";
+import { CompoundRead, HouseholdUser, ProtocolRead, timeUntil } from "@/lib/types";
 import { calculateBlend, type BlendComponentInput } from "@/lib/reconstitution";
 import BlendResultCard from "@/components/BlendResultCard";
+import UserAttributionChip from "@/components/UserAttributionChip";
+import { useAuth } from "@/context/AuthContext";
 
 // ---------------------------------------------------------------------------
 // Cron helper
@@ -18,7 +20,7 @@ interface CronState {
   type: ScheduleType;
   hour: string;
   minute: string;
-  weekday: string; // 0=Sun…6=Sat for weekly
+  weekday: string;
   customCron: string;
 }
 
@@ -43,29 +45,12 @@ function buildCron(s: CronState): string {
   }
 }
 
-function cronLabel(s: CronState): string {
-  if (s.type === "custom") return s.customCron || "—";
-  const h = parseInt(s.hour);
-  const m = parseInt(s.minute);
-  const timeStr = `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  switch (s.type) {
-    case "daily":       return `Daily at ${timeStr}`;
-    case "every_other": return `Every other day at ${timeStr}`;
-    case "mwf":         return `Mon/Wed/Fri at ${timeStr}`;
-    case "weekdays":    return `Mon–Fri at ${timeStr}`;
-    case "weekly":      return `Every ${days[parseInt(s.weekday)]} at ${timeStr}`;
-  }
-}
-
 function humanCron(cron: string): string {
-  // Try to recognise common patterns produced by buildCron
   const p = cron.trim().split(/\s+/);
   if (p.length !== 5) return cron;
   const [m, h, dom, , dow] = p;
   const pad = (n: string) => n.padStart(2, "0");
   const hNum = parseInt(h);
-  const mNum = parseInt(m);
   const timeStr = isNaN(hNum) ? `${h}:${pad(m)}` : `${hNum % 12 || 12}:${pad(m)} ${hNum < 12 ? "AM" : "PM"}`;
   if (dom === "*/2" && dow === "*") return `Every other day at ${timeStr}`;
   if (dow === "1,3,5" && dom === "*") return `Mon/Wed/Fri at ${timeStr}`;
@@ -102,13 +87,7 @@ const HOURS = Array.from({ length: 24 }, (_, i) => ({
   label: `${i % 12 || 12}:00 ${i < 12 ? "AM" : "PM"}`,
 }));
 
-function CronHelper({
-  value,
-  onChange,
-}: {
-  value: CronState;
-  onChange: (v: CronState) => void;
-}) {
+function CronHelper({ value, onChange }: { value: CronState; onChange: (v: CronState) => void }) {
   const inputCls =
     "w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white";
 
@@ -190,21 +169,25 @@ function CronHelper({
 // Page
 // ---------------------------------------------------------------------------
 
+type FilterMode = "all" | "mine" | "person";
+
 interface FormState {
   compound_id: string;
   dose_mcg: string;
   dose_mode: "total" | "anchor";
   anchor_component_id: string;
+  assignee_user_id: string;
   cron: CronState;
   active: boolean;
   notes: string;
 }
 
-const emptyForm = (): FormState => ({
+const emptyForm = (selfId?: number): FormState => ({
   compound_id: "",
   dose_mcg: "",
   dose_mode: "total",
   anchor_component_id: "",
+  assignee_user_id: selfId ? String(selfId) : "",
   cron: { ...defaultCron },
   active: true,
   notes: "",
@@ -228,29 +211,46 @@ function compoundById(compounds: CompoundRead[], id: string) {
 }
 
 export default function ProtocolsPage() {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
+
   const [protocols, setProtocols] = useState<ProtocolRead[]>([]);
   const [compounds, setCompounds] = useState<CompoundRead[]>([]);
+  const [householdUsers, setHouseholdUsers] = useState<HouseholdUser[]>([]);
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [filterMode, setFilterMode] = useState<FilterMode>("all");
+  const [filterPersonId, setFilterPersonId] = useState<string>("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ProtocolRead | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm());
+  const [form, setForm] = useState<FormState>(emptyForm(currentUser?.id));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = async (inactive = includeInactive) => {
-    const [ps, cs] = await Promise.all([
+    const [ps, cs, us] = await Promise.all([
       apiFetch(`/api/protocols?include_inactive=${inactive}`).then((r) => (r.ok ? r.json() : [])),
       apiFetch("/api/compounds").then((r) => (r.ok ? r.json() : [])),
+      apiFetch("/api/users/household").then((r) => (r.ok ? r.json() : [])),
     ]);
     setProtocols(ps);
     setCompounds(cs);
+    setHouseholdUsers(us);
   };
 
   useEffect(() => { load(); }, [includeInactive]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const visibleProtocols = protocols.filter((p) => {
+    if (filterMode === "mine") return p.assignee_user_id === currentUser?.id;
+    if (filterMode === "person" && filterPersonId) return String(p.assignee_user_id) === filterPersonId;
+    return true;
+  });
+
+  const canEditProtocol = (p: ProtocolRead) =>
+    isAdmin || p.assignee_user_id === currentUser?.id;
+
   const openAdd = () => {
     setEditing(null);
-    setForm(emptyForm());
+    setForm(emptyForm(currentUser?.id));
     setError(null);
     setModalOpen(true);
   };
@@ -262,6 +262,7 @@ export default function ProtocolsPage() {
       dose_mcg: String(p.dose_mcg),
       dose_mode: (p.dose_mode as "total" | "anchor") ?? "total",
       anchor_component_id: String(p.anchor_component_id ?? ""),
+      assignee_user_id: String(p.assignee_user_id),
       cron: cronStateFromString(p.schedule_cron),
       active: p.active,
       notes: p.notes ?? "",
@@ -278,7 +279,7 @@ export default function ProtocolsPage() {
     setError(null);
     const schedule_cron = buildCron(form.cron);
     if (!schedule_cron.trim()) { setError("Invalid schedule"); setSubmitting(false); return; }
-    const body = {
+    const body: Record<string, unknown> = {
       compound_id: parseInt(form.compound_id),
       dose_mcg: parseInt(form.dose_mcg),
       schedule_cron,
@@ -287,6 +288,9 @@ export default function ProtocolsPage() {
       dose_mode: form.dose_mode,
       anchor_component_id: parseInt(form.anchor_component_id) || null,
     };
+    if (isAdmin) {
+      body.assignee_user_id = parseInt(form.assignee_user_id) || currentUser?.id;
+    }
     try {
       const res = editing
         ? await apiFetch(`/api/protocols/${editing.id}`, { method: "PATCH", body: JSON.stringify(body) })
@@ -304,6 +308,7 @@ export default function ProtocolsPage() {
   };
 
   const toggleActive = async (p: ProtocolRead) => {
+    if (!canEditProtocol(p)) return;
     await apiFetch(`/api/protocols/${p.id}`, {
       method: "PATCH",
       body: JSON.stringify({ active: !p.active }),
@@ -312,6 +317,7 @@ export default function ProtocolsPage() {
   };
 
   const handleDelete = async (p: ProtocolRead) => {
+    if (!canEditProtocol(p)) return;
     if (!confirm(`Delete protocol for ${p.compound_name}?`)) return;
     await apiFetch(`/api/protocols/${p.id}`, { method: "DELETE" });
     load();
@@ -342,33 +348,71 @@ export default function ProtocolsPage() {
         </div>
       </div>
 
-      <label className="mb-4 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-        <input
-          type="checkbox"
-          checked={includeInactive}
-          onChange={(e) => setIncludeInactive(e.target.checked)}
-          className="h-4 w-4 rounded"
-        />
-        Show inactive
-      </label>
+      {/* Filters row */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+          {(["all", "mine", "person"] as FilterMode[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => setFilterMode(m)}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                filterMode === m
+                  ? "bg-blue-600 text-white"
+                  : "bg-white text-gray-600 dark:bg-gray-900 dark:text-gray-400"
+              }`}
+            >
+              {m === "all" ? "All" : m === "mine" ? "Mine" : "By person"}
+            </button>
+          ))}
+        </div>
+        {filterMode === "person" && (
+          <select
+            value={filterPersonId}
+            onChange={(e) => setFilterPersonId(e.target.value)}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+          >
+            <option value="">Select person…</option>
+            {householdUsers.map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+        )}
+        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+          <input
+            type="checkbox"
+            checked={includeInactive}
+            onChange={(e) => setIncludeInactive(e.target.checked)}
+            className="h-4 w-4 rounded"
+          />
+          Show inactive
+        </label>
+      </div>
 
-      {protocols.length === 0 && (
+      {visibleProtocols.length === 0 && (
         <p className="mt-12 text-center text-gray-400 dark:text-gray-500">
           No protocols yet. Tap Add to create one.
         </p>
       )}
 
       <div className="space-y-3">
-        {protocols.map((p) => (
+        {visibleProtocols.map((p) => (
           <div
             key={p.id}
             className={`rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900 ${!p.active ? "opacity-60" : ""}`}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-semibold text-gray-900 dark:text-white">{p.compound_name}</p>
                   <span className="text-sm text-gray-500 dark:text-gray-400">{p.dose_mcg} mcg</span>
+                </div>
+                {/* Assignee badge */}
+                <div className="mt-1">
+                  <UserAttributionChip
+                    userId={p.assignee_user_id}
+                    userName={p.assignee_name}
+                    size="sm"
+                  />
                 </div>
                 <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
                   {humanCron(p.schedule_cron)}
@@ -385,26 +429,29 @@ export default function ProtocolsPage() {
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-3">
-                {/* Active toggle */}
-                <button
-                  onClick={() => toggleActive(p)}
-                  className={`relative h-6 w-10 rounded-full transition-colors ${p.active ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"}`}
-                  title={p.active ? "Deactivate" : "Activate"}
-                >
-                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${p.active ? "translate-x-4" : "translate-x-0.5"}`} />
-                </button>
-                <button
-                  onClick={() => openEdit(p)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-                >
-                  <Pencil size={16} />
-                </button>
-                <button
-                  onClick={() => handleDelete(p)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-                >
-                  <Trash2 size={16} />
-                </button>
+                {canEditProtocol(p) && (
+                  <>
+                    <button
+                      onClick={() => toggleActive(p)}
+                      className={`relative h-6 w-10 rounded-full transition-colors ${p.active ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"}`}
+                      title={p.active ? "Deactivate" : "Activate"}
+                    >
+                      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${p.active ? "translate-x-4" : "translate-x-0.5"}`} />
+                    </button>
+                    <button
+                      onClick={() => openEdit(p)}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(p)}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -422,28 +469,20 @@ export default function ProtocolsPage() {
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                 {editing ? "Edit protocol" : "Add protocol"}
               </h2>
-              <button
-                onClick={closeModal}
-                className="text-2xl leading-none text-gray-400 dark:text-gray-500"
-              >
-                ×
-              </button>
+              <button onClick={closeModal} className="text-2xl leading-none text-gray-400 dark:text-gray-500">×</button>
             </div>
 
-            {/* Derived values used throughout the form */}
             {(() => {
               const selectedCompound = compoundById(compounds, form.compound_id);
               const isBlend = selectedCompound?.is_blend ?? false;
               const blendComponents = selectedCompound?.blend_components ?? [];
 
-              // The anchor component the user has selected (falls back to compound default or first)
               const selectedAnchorBc =
                 blendComponents.find((bc) => String(bc.id) === form.anchor_component_id) ??
                 blendComponents.find((bc) => bc.is_anchor) ??
                 blendComponents[0] ??
                 null;
 
-              // Build component inputs with is_anchor overridden by user's choice
               const previewComponents: BlendComponentInput[] = blendComponents.map((bc) => ({
                 name: bc.name,
                 amount_mg: bc.amount_mg,
@@ -458,167 +497,189 @@ export default function ProtocolsPage() {
                   : null;
 
               return (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className={labelCls}>Compound</label>
-                <select
-                  data-testid="compound-select"
-                  value={form.compound_id}
-                  onChange={(e) => {
-                    const newId = e.target.value;
-                    const newCompound = compoundById(compounds, newId);
-                    const defaultAnchor =
-                      newCompound?.blend_components.find((bc) => bc.is_anchor) ??
-                      newCompound?.blend_components[0];
-                    setForm({
-                      ...form,
-                      compound_id: newId,
-                      dose_mode: "total",
-                      anchor_component_id: String(defaultAnchor?.id ?? ""),
-                      dose_mcg: "",
-                    });
-                  }}
-                  required
-                  className={inputCls}
-                >
-                  <option value="">Select compound…</option>
-                  {compounds.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}{c.is_blend ? " (blend)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Dose mode — only for blend compounds */}
-              {isBlend && (
-                <div>
-                  <label className={labelCls}>Dose mode</label>
-                  <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
-                    {(["total", "anchor"] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setForm({ ...form, dose_mode: mode, dose_mcg: "" })}
-                        className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
-                          form.dose_mode === mode
-                            ? "bg-blue-600 text-white"
-                            : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
-                        }`}
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  {/* Assignee — admin sees dropdown, member sees locked name */}
+                  {isAdmin ? (
+                    <div>
+                      <label className={labelCls}>Assigned to</label>
+                      <select
+                        value={form.assignee_user_id}
+                        onChange={(e) => setForm({ ...form, assignee_user_id: e.target.value })}
+                        required
+                        className={inputCls}
                       >
-                        {mode === "total" ? "Total blend" : "By anchor component"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Anchor component selector — only in anchor mode */}
-              {isBlend && form.dose_mode === "anchor" && (
-                <div>
-                  <label className={labelCls}>Anchor component</label>
-                  <select
-                    data-testid="anchor-component-select"
-                    value={form.anchor_component_id}
-                    onChange={(e) =>
-                      setForm({ ...form, anchor_component_id: e.target.value, dose_mcg: "" })
-                    }
-                    className={inputCls}
-                  >
-                    {blendComponents.map((bc) => (
-                      <option key={bc.id} value={bc.id}>
-                        {bc.name} ({bc.amount_mg} mg)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className={labelCls}>
-                  {isBlend && form.dose_mode === "anchor" && selectedAnchorBc
-                    ? `${selectedAnchorBc.name} dose (mcg)`
-                    : isBlend
-                    ? "Total blend dose (mcg)"
-                    : "Dose (mcg)"}
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={form.dose_mcg}
-                  onChange={(e) => setForm({ ...form, dose_mcg: e.target.value })}
-                  required
-                  className={inputCls}
-                  placeholder="e.g. 500"
-                />
-              </div>
-
-              {/* Blend preview */}
-              {isBlend && (
-                <div>
-                  {bacMl > 0 ? (
-                    <BlendResultCard
-                      result={previewResult}
-                      doseMcg={doseMcgNum}
-                      doseMode={form.dose_mode}
-                      anchorName={selectedAnchorBc?.name}
-                    />
+                        <option value="">Select person…</option>
+                        {householdUsers.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                      </select>
+                    </div>
                   ) : (
-                    <p className="text-xs text-gray-400 dark:text-gray-500">
-                      Set BAC water on this compound to see a dose preview.
-                    </p>
+                    <div>
+                      <label className={labelCls}>Assigned to</label>
+                      <p className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                        {currentUser?.name}
+                      </p>
+                    </div>
                   )}
-                </div>
-              )}
 
-              <div>
-                <label className={labelCls}>Schedule</label>
-                <CronHelper
-                  value={form.cron}
-                  onChange={(cron) => setForm({ ...form, cron })}
-                />
-              </div>
+                  <div>
+                    <label className={labelCls}>Compound</label>
+                    <select
+                      data-testid="compound-select"
+                      value={form.compound_id}
+                      onChange={(e) => {
+                        const newId = e.target.value;
+                        const newCompound = compoundById(compounds, newId);
+                        const defaultAnchor =
+                          newCompound?.blend_components.find((bc) => bc.is_anchor) ??
+                          newCompound?.blend_components[0];
+                        setForm({
+                          ...form,
+                          compound_id: newId,
+                          dose_mode: "total",
+                          anchor_component_id: String(defaultAnchor?.id ?? ""),
+                          dose_mcg: "",
+                        });
+                      }}
+                      required
+                      className={inputCls}
+                    >
+                      <option value="">Select compound…</option>
+                      {compounds.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}{c.is_blend ? " (blend)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div>
-                <label className={labelCls}>Notes <span className="font-normal text-gray-400">(optional)</span></label>
-                <textarea
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  rows={2}
-                  className={inputCls}
-                  placeholder="Optional"
-                />
-              </div>
+                  {isBlend && (
+                    <div>
+                      <label className={labelCls}>Dose mode</label>
+                      <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+                        {(["total", "anchor"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setForm({ ...form, dose_mode: mode, dose_mcg: "" })}
+                            className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                              form.dose_mode === mode
+                                ? "bg-blue-600 text-white"
+                                : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                            }`}
+                          >
+                            {mode === "total" ? "Total blend" : "By anchor component"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={form.active}
-                  onChange={(e) => setForm({ ...form, active: e.target.checked })}
-                  className="h-4 w-4 rounded"
-                />
-                Active
-              </label>
+                  {isBlend && form.dose_mode === "anchor" && (
+                    <div>
+                      <label className={labelCls}>Anchor component</label>
+                      <select
+                        data-testid="anchor-component-select"
+                        value={form.anchor_component_id}
+                        onChange={(e) =>
+                          setForm({ ...form, anchor_component_id: e.target.value, dose_mcg: "" })
+                        }
+                        className={inputCls}
+                      >
+                        {blendComponents.map((bc) => (
+                          <option key={bc.id} value={bc.id}>
+                            {bc.name} ({bc.amount_mg} mg)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
-              {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+                  <div>
+                    <label className={labelCls}>
+                      {isBlend && form.dose_mode === "anchor" && selectedAnchorBc
+                        ? `${selectedAnchorBc.name} dose (mcg)`
+                        : isBlend
+                        ? "Total blend dose (mcg)"
+                        : "Dose (mcg)"}
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={form.dose_mcg}
+                      onChange={(e) => setForm({ ...form, dose_mcg: e.target.value })}
+                      required
+                      className={inputCls}
+                      placeholder="e.g. 500"
+                    />
+                  </div>
 
-              <div className="flex gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="flex-1 rounded-lg border border-gray-300 py-3 text-sm font-medium text-gray-700 dark:border-gray-700 dark:text-gray-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 rounded-lg bg-blue-600 py-3 text-sm font-medium text-white disabled:opacity-50"
-                >
-                  {submitting ? "Saving…" : "Save"}
-                </button>
-              </div>
-            </form>
+                  {isBlend && (
+                    <div>
+                      {bacMl > 0 ? (
+                        <BlendResultCard
+                          result={previewResult}
+                          doseMcg={doseMcgNum}
+                          doseMode={form.dose_mode}
+                          anchorName={selectedAnchorBc?.name}
+                        />
+                      ) : (
+                        <p className="text-xs text-gray-400 dark:text-gray-500">
+                          Set BAC water on this compound to see a dose preview.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className={labelCls}>Schedule</label>
+                    <CronHelper
+                      value={form.cron}
+                      onChange={(cron) => setForm({ ...form, cron })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelCls}>Notes <span className="font-normal text-gray-400">(optional)</span></label>
+                    <textarea
+                      value={form.notes}
+                      onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                      rows={2}
+                      className={inputCls}
+                      placeholder="Optional"
+                    />
+                  </div>
+
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={form.active}
+                      onChange={(e) => setForm({ ...form, active: e.target.checked })}
+                      className="h-4 w-4 rounded"
+                    />
+                    Active
+                  </label>
+
+                  {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+                  <div className="flex gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      className="flex-1 rounded-lg border border-gray-300 py-3 text-sm font-medium text-gray-700 dark:border-gray-700 dark:text-gray-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex-1 rounded-lg bg-blue-600 py-3 text-sm font-medium text-white disabled:opacity-50"
+                    >
+                      {submitting ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                </form>
               );
             })()}
           </div>

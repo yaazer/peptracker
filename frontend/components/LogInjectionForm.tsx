@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { CompoundRead, INJECTION_SITES } from "@/lib/types";
+import { CompoundRead, HouseholdUser, INJECTION_SITES } from "@/lib/types";
+import { useAuth } from "@/context/AuthContext";
 
 function localDatetimeNow(): string {
   const now = new Date();
@@ -12,16 +13,22 @@ function localDatetimeNow(): string {
 
 interface Props {
   compounds: CompoundRead[];
+  householdUsers: HouseholdUser[];
   onSuccess?: () => void;
 }
 
-export default function LogInjectionForm({ compounds, onSuccess }: Props) {
+export default function LogInjectionForm({ compounds, householdUsers, onSuccess }: Props) {
+  const { user: currentUser } = useAuth();
+
   const [compoundId, setCompoundId] = useState("");
   const [doseMcg, setDoseMcg] = useState("");
   const [doseMode, setDoseMode] = useState<"total" | "anchor">("total");
   const [site, setSite] = useState("");
   const [injectedAt, setInjectedAt] = useState(localDatetimeNow());
   const [notes, setNotes] = useState("");
+  const [injectedById, setInjectedById] = useState<string>(
+    currentUser ? String(currentUser.id) : ""
+  );
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +49,10 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
     (minDose != null || maxDose != null) &&
     (doseNum < (minDose ?? -Infinity) || doseNum > (maxDose ?? Infinity));
 
+  const isLoggingForOther =
+    currentUser && injectedById && String(currentUser.id) !== injectedById;
+  const injectedByUser = householdUsers.find((u) => String(u.id) === injectedById);
+
   const handleCompoundChange = (id: string) => {
     setCompoundId(id);
     setDoseMode("total");
@@ -55,6 +66,7 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
     setInjectedAt(localDatetimeNow());
     setError(null);
     setBypassWarning(false);
+    setInjectedById(currentUser ? String(currentUser.id) : "");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -64,16 +76,20 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
     setError(null);
     setSubmitting(true);
     try {
+      const body: Record<string, unknown> = {
+        compound_id: parseInt(compoundId),
+        dose_mcg: parseInt(doseMcg),
+        injection_site: site,
+        injected_at: new Date(injectedAt).toISOString(),
+        notes: notes || null,
+        dose_mode: isBlend ? doseMode : "total",
+      };
+      if (injectedById && injectedById !== String(currentUser?.id)) {
+        body.injected_by_user_id = parseInt(injectedById);
+      }
       const res = await apiFetch("/api/injections", {
         method: "POST",
-        body: JSON.stringify({
-          compound_id: parseInt(compoundId),
-          dose_mcg: parseInt(doseMcg),
-          injection_site: site,
-          injected_at: new Date(injectedAt).toISOString(),
-          notes: notes || null,
-          dose_mode: isBlend ? doseMode : "total",
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -102,6 +118,29 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
         </div>
       )}
 
+      {/* Who injected this? */}
+      {householdUsers.length > 1 && (
+        <div>
+          <label className={labelCls}>Who injected this?</label>
+          <select
+            value={injectedById}
+            onChange={(e) => setInjectedById(e.target.value)}
+            className={inputCls}
+          >
+            {householdUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}{u.id === currentUser?.id ? " (me)" : ""}
+              </option>
+            ))}
+          </select>
+          {isLoggingForOther && injectedByUser && (
+            <p className="mt-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+              Logging an injection for {injectedByUser.name} — they will see this in their history.
+            </p>
+          )}
+        </div>
+      )}
+
       <div>
         <label className={labelCls}>Compound</label>
         <select
@@ -119,7 +158,6 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
         </select>
       </div>
 
-      {/* Blend dose mode toggle */}
       {isBlend && (
         <div>
           <label className={labelCls}>Dose mode</label>
@@ -160,7 +198,6 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
           placeholder="e.g. 500"
         />
 
-        {/* Dose range warning */}
         {showDoseWarning && (
           <div className="mt-2 rounded-lg border border-amber-600 bg-amber-900/30 px-3 py-2.5">
             <p className="text-sm text-amber-300">

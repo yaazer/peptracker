@@ -9,12 +9,13 @@ import { apiFetch } from "@/lib/api";
 import {
   CompoundRead,
   DashboardData,
-  formatDatetime,
+  HouseholdUser,
   siteLabel,
   timeAgo,
   timeUntil,
 } from "@/lib/types";
 import LogInjectionForm from "@/components/LogInjectionForm";
+import UserAttributionChip, { userColor } from "@/components/UserAttributionChip";
 import { Plus } from "@/components/icons";
 
 function LogOutIcon() {
@@ -58,18 +59,27 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const isAdmin = user?.role === "admin";
+
   const [data, setData] = useState<DashboardData | null>(null);
   const [compounds, setCompounds] = useState<CompoundRead[]>([]);
+  const [householdUsers, setHouseholdUsers] = useState<HouseholdUser[]>([]);
   const [fabOpen, setFabOpen] = useState(false);
-  const [tick, setTick] = useState(0); // drives countdown re-render every minute
+  const [tick, setTick] = useState(0);
+  // Admins default to Household view; members default to Mine
+  const [weekScope, setWeekScope] = useState<"household" | "mine">(
+    isAdmin ? "household" : "mine"
+  );
 
   const load = useCallback(async () => {
-    const [dash, cpds] = await Promise.all([
+    const [dash, cpds, us] = await Promise.all([
       apiFetch("/api/dashboard").then((r) => (r.ok ? r.json() : null)),
       apiFetch("/api/compounds").then((r) => (r.ok ? r.json() : [])),
+      apiFetch("/api/users/household").then((r) => (r.ok ? r.json() : [])),
     ]);
     setData(dash);
     setCompounds(cpds);
+    setHouseholdUsers(us);
   }, []);
 
   useEffect(() => {
@@ -78,8 +88,13 @@ export default function DashboardPage() {
     return () => clearInterval(id);
   }, [load]);
 
-  // Suppress unused-var warning for tick — it drives re-render for countdowns
   void tick;
+
+  const activeWeekSummary = data
+    ? weekScope === "household"
+      ? data.week_summary
+      : data.my_week_summary
+    : null;
 
   return (
     <div className="px-4 pt-5 pb-6 space-y-5">
@@ -108,12 +123,13 @@ export default function DashboardPage() {
                 <div className="min-w-0">
                   <p className="font-semibold text-gray-900 truncate dark:text-white">{item.compound_name}</p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">{item.dose_mcg} mcg</p>
+                  <div className="mt-0.5">
+                    <UserAttributionChip userId={item.assignee_user_id} userName={item.assignee_name} size="sm" />
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <span className={`text-sm font-medium tabular-nums ${
-                    new Date(item.next_fire_at) <= new Date()
-                      ? "text-red-500"
-                      : "text-blue-600"
+                    new Date(item.next_fire_at) <= new Date() ? "text-red-500" : "text-blue-600"
                   }`}>
                     {timeUntil(item.next_fire_at)}
                   </span>
@@ -131,32 +147,56 @@ export default function DashboardPage() {
       )}
 
       {/* This week summary */}
-      {data && (
+      {data && activeWeekSummary && (
         <section>
-          <SectionTitle>This week</SectionTitle>
+          <div className="mb-2 flex items-center justify-between">
+            <SectionTitle>This week</SectionTitle>
+            <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+              {(["household", "mine"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setWeekScope(s)}
+                  className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                    weekScope === s
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-gray-600 dark:bg-gray-900 dark:text-gray-400"
+                  }`}
+                >
+                  {s === "household" ? "Household" : "Mine"}
+                </button>
+              ))}
+            </div>
+          </div>
           <Card>
             <div className="mb-3 flex gap-4">
               <div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {data.week_summary.total_injections}
+                  {activeWeekSummary.total_injections}
                 </p>
                 <p className="text-xs text-gray-400 dark:text-gray-500">injections</p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {data.week_summary.by_compound.length}
+                  {activeWeekSummary.by_compound.length}
                 </p>
                 <p className="text-xs text-gray-400 dark:text-gray-500">compounds</p>
               </div>
             </div>
-            {data.week_summary.by_compound.length > 0 && (
-              <div className="space-y-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
-                {data.week_summary.by_compound.map((c) => (
-                  <div key={c.compound_name} className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">{c.compound_name}</span>
-                    <span className="font-medium text-gray-900 tabular-nums dark:text-white">
-                      {c.total_mcg.toLocaleString()} mcg
-                    </span>
+            {activeWeekSummary.by_compound.length > 0 && (
+              <div className="space-y-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+                {activeWeekSummary.by_compound.map((c) => (
+                  <div key={c.compound_name}>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">{c.compound_name}</span>
+                      <span className="font-medium text-gray-900 tabular-nums dark:text-white">
+                        {c.total_mcg.toLocaleString()} mcg
+                      </span>
+                    </div>
+                    {weekScope === "household" && c.by_user.length > 1 && (
+                      <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+                        {c.by_user.map((u) => `${u.user_name}: ${u.total_mcg.toLocaleString()} mcg`).join(" · ")}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -180,19 +220,32 @@ export default function DashboardPage() {
         <section>
           <SectionTitle>Last injection</SectionTitle>
           <div className="space-y-2">
-            {data.last_by_compound.map((item) => (
-              <Card key={item.compound_id} className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-semibold text-gray-900 truncate dark:text-white">{item.compound_name}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {item.dose_mcg} mcg · {siteLabel(item.injection_site)}
-                  </p>
-                </div>
-                <span className="shrink-0 text-sm text-gray-400 tabular-nums">
-                  {timeAgo(item.injected_at)}
-                </span>
-              </Card>
-            ))}
+            {data.last_by_compound.map((item) => {
+              const notCurrentUser = item.injected_by_user_id !== user?.id;
+              return (
+                <Card
+                  key={item.compound_id}
+                  className={`flex items-center justify-between gap-2 ${
+                    notCurrentUser
+                      ? "bg-amber-50/60 dark:bg-amber-950/20"
+                      : ""
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 truncate dark:text-white">{item.compound_name}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {item.dose_mcg} mcg · {siteLabel(item.injection_site)}
+                    </p>
+                    <div className="mt-0.5">
+                      <UserAttributionChip userId={item.injected_by_user_id} userName={item.injector_name} size="sm" />
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-sm font-medium text-gray-400 tabular-nums">
+                    {timeAgo(item.injected_at)}
+                  </span>
+                </Card>
+              );
+            })}
           </div>
         </section>
       )}
@@ -210,17 +263,23 @@ export default function DashboardPage() {
             {data.recent.map((inj) => {
               const compound = compounds.find((c) => c.id === inj.compound_id);
               return (
-                <div key={inj.id} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
-                  <div className="min-w-0">
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
-                      {compound?.name ?? `#${inj.compound_id}`}
-                    </span>
-                    <span className="ml-2 text-sm text-gray-400 dark:text-gray-500">
-                      {inj.dose_mcg} mcg
-                    </span>
+                <div key={inj.id} className="flex items-center gap-2 py-2.5 first:pt-0 last:pb-0">
+                  <div className="min-w-0 flex-1">
+                    {/* Name leads the line */}
+                    <div className="flex flex-wrap items-baseline gap-1.5">
+                      <UserAttributionChip
+                        userId={inj.injected_by_user_id}
+                        userName={inj.injector_name}
+                        size="sm"
+                      />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        injected {inj.dose_mcg} mcg {compound?.name ?? `#${inj.compound_id}`}
+                        {compound?.is_blend ? ` via ${compound.name}` : ""}
+                      </span>
+                    </div>
                   </div>
                   <span className="shrink-0 text-xs text-gray-400 dark:text-gray-500">
-                    {formatDatetime(inj.injected_at)}
+                    {timeAgo(inj.injected_at)}
                   </span>
                 </div>
               );
@@ -257,7 +316,7 @@ export default function DashboardPage() {
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
           onClick={(e) => e.target === e.currentTarget && setFabOpen(false)}
         >
-          <div className="w-full max-w-md rounded-t-2xl bg-white px-5 pt-5 pb-8 sm:rounded-2xl dark:bg-gray-900">
+          <div className="w-full max-w-md overflow-y-auto rounded-t-2xl bg-white px-5 pt-5 pb-8 sm:max-h-[90vh] sm:rounded-2xl dark:bg-gray-900">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">Log injection</h2>
               <button
@@ -269,6 +328,7 @@ export default function DashboardPage() {
             </div>
             <LogInjectionForm
               compounds={compounds}
+              householdUsers={householdUsers}
               onSuccess={() => {
                 setFabOpen(false);
                 load();

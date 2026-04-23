@@ -1,3 +1,9 @@
+export interface HouseholdUser {
+  id: number;
+  name: string;
+  role: string;
+}
+
 export interface BlendComponent {
   id?: number;
   name: string;
@@ -16,7 +22,7 @@ export interface ComponentSnapshot {
 
 export interface CompoundRead {
   id: number;
-  user_id: number;
+  created_by_user_id: number;
   name: string;
   concentration_mg_per_ml: number | null;
   vial_size_mg: number | null;
@@ -40,7 +46,8 @@ export interface CompoundRead {
 
 export interface InjectionRead {
   id: number;
-  user_id: number;
+  logged_by_user_id: number;
+  injected_by_user_id: number;
   compound_id: number;
   dose_mcg: number;
   injection_site: string;
@@ -50,6 +57,8 @@ export interface InjectionRead {
   draw_volume_ml: number | null;
   dose_mode: string;
   component_snapshot: ComponentSnapshot[] | null;
+  logger_name: string;
+  injector_name: string;
 }
 
 export const INJECTION_SITES = [
@@ -104,7 +113,9 @@ export function timeUntil(iso: string): string {
 
 export interface ProtocolRead {
   id: number;
-  user_id: number;
+  assignee_user_id: number;
+  assignee_name: string;
+  created_by_user_id: number;
   compound_id: number;
   compound_name: string;
   dose_mcg: number;
@@ -134,11 +145,20 @@ export interface UserProfile {
   name: string;
   ntfy_topic: string | null;
   created_at: string;
+  role: string;
+  force_password_change: boolean;
 }
 
 // ---------------------------------------------------------------------------
 // Dashboard API types
 // ---------------------------------------------------------------------------
+
+export interface UserDoseSummary {
+  user_id: number;
+  user_name: string;
+  count: number;
+  total_mcg: number;
+}
 
 export interface NextDoseItem {
   protocol_id: number;
@@ -146,6 +166,8 @@ export interface NextDoseItem {
   dose_mcg: number;
   next_fire_at: string;
   schedule_cron: string;
+  assignee_user_id: number;
+  assignee_name: string;
 }
 
 export interface LastByCompoundItem {
@@ -154,12 +176,22 @@ export interface LastByCompoundItem {
   dose_mcg: number;
   injection_site: string;
   injected_at: string;
+  injected_by_user_id: number;
+  injector_name: string;
+  logged_by_user_id: number;
+  logger_name: string;
 }
 
 export interface WeekCompoundSummary {
   compound_name: string;
   count: number;
   total_mcg: number;
+  by_user: UserDoseSummary[];
+}
+
+export interface WeekSummary {
+  total_injections: number;
+  by_compound: WeekCompoundSummary[];
 }
 
 export interface TimelinePoint {
@@ -173,10 +205,8 @@ export interface TimelinePoint {
 export interface DashboardData {
   next_doses: NextDoseItem[];
   last_by_compound: LastByCompoundItem[];
-  week_summary: {
-    total_injections: number;
-    by_compound: WeekCompoundSummary[];
-  };
+  week_summary: WeekSummary;
+  my_week_summary: WeekSummary;
   recent: InjectionRead[];
   timeline: TimelinePoint[];
 }

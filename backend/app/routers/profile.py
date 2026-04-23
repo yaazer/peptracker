@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -8,6 +9,8 @@ from app.scheduler import _send_ntfy
 from app.schemas import UserRead, UserUpdate
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @router.get("", response_model=UserRead)
@@ -21,7 +24,11 @@ def update_profile(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    if "password" in data and data["password"]:
+        user.hashed_password = pwd_context.hash(data.pop("password"))
+        user.force_password_change = False
+    for field, value in data.items():
         setattr(user, field, value)
     db.commit()
     db.refresh(user)
@@ -34,7 +41,7 @@ def test_notification(user: User = Depends(get_current_user)):
         return {"ok": False, "error": "No ntfy topic configured"}
     delivered, error = _send_ntfy(
         user.ntfy_topic,
-        "peptracker",
+        "PepTracker v1",
         "Test notification — your reminders are working!",
     )
     return {"ok": delivered, "error": error}

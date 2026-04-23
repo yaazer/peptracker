@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Archive, ArchiveRestore, Calculator, ExternalLink, Pencil, Plus, Trash2 } from "@/components/icons";
 import { apiFetch } from "@/lib/api";
 import { BlendComponent, CompoundRead } from "@/lib/types";
+import { useAuth } from "@/context/AuthContext";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,6 +91,8 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 // ---------------------------------------------------------------------------
 
 export default function CompoundsPage() {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
   const searchParams = useSearchParams();
   const [compounds, setCompounds] = useState<CompoundRead[]>([]);
   const [showArchived, setShowArchived] = useState(false);
@@ -269,12 +272,14 @@ export default function CompoundsPage() {
           >
             <Calculator size={15} /> Calc
           </Link>
-          <button
-            onClick={openAdd}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"
-          >
-            <Plus size={16} /> Add
-          </button>
+          {isAdmin && (
+            <button
+              onClick={openAdd}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"
+            >
+              <Plus size={16} /> Add
+            </button>
+          )}
         </div>
       </div>
 
@@ -359,33 +364,37 @@ export default function CompoundsPage() {
                 >
                   <Calculator size={16} />
                 </Link>
-                <button
-                  onClick={() => openEdit(c)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-                >
-                  <Pencil size={16} />
-                </button>
-                <button
-                  onClick={() => toggleArchive(c)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-                  title={c.archived ? "Unarchive" : "Archive"}
-                >
-                  {c.archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
-                </button>
-                <button
-                  onClick={() => handleDelete(c)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-                >
-                  <Trash2 size={16} />
-                </button>
+                {isAdmin && (
+                  <>
+                    <button
+                      onClick={() => openEdit(c)}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      onClick={() => toggleArchive(c)}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+                      title={c.archived ? "Unarchive" : "Archive"}
+                    >
+                      {c.archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(c)}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Add / Edit modal */}
-      {modalOpen && (
+      {/* Add / Edit modal — admin only */}
+      {modalOpen && isAdmin && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
           onClick={(e) => e.target === e.currentTarget && closeModal()}

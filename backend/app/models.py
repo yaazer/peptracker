@@ -26,17 +26,46 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-
     ntfy_topic: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    role: Mapped[str] = mapped_column(String(10), nullable=False, default="member")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    force_password_change: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    compounds: Mapped[list["Compound"]] = relationship(
-        "Compound", back_populates="user", cascade="all, delete-orphan"
+    # Compounds this user created (audit trail, does not control visibility)
+    created_compounds: Mapped[list["Compound"]] = relationship(
+        "Compound",
+        foreign_keys="Compound.created_by_user_id",
+        back_populates="creator",
     )
-    injections: Mapped[list["Injection"]] = relationship(
-        "Injection", back_populates="user", cascade="all, delete-orphan"
+
+    # Protocols assigned to this user (they receive reminders)
+    assigned_protocols: Mapped[list["Protocol"]] = relationship(
+        "Protocol",
+        foreign_keys="Protocol.assignee_user_id",
+        back_populates="assignee",
+        cascade="all, delete-orphan",
     )
-    protocols: Mapped[list["Protocol"]] = relationship(
-        "Protocol", back_populates="user", cascade="all, delete-orphan"
+
+    # Protocols created by this user
+    created_protocols: Mapped[list["Protocol"]] = relationship(
+        "Protocol",
+        foreign_keys="Protocol.created_by_user_id",
+        back_populates="creator",
+    )
+
+    # Injections this user logged (operated the app)
+    logged_injections: Mapped[list["Injection"]] = relationship(
+        "Injection",
+        foreign_keys="Injection.logged_by_user_id",
+        back_populates="logger",
+    )
+
+    # Injections received by this user (physically injected)
+    received_injections: Mapped[list["Injection"]] = relationship(
+        "Injection",
+        foreign_keys="Injection.injected_by_user_id",
+        back_populates="injector",
     )
 
 
@@ -44,8 +73,8 @@ class Compound(Base):
     __tablename__ = "compounds"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    created_by_user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     concentration_mg_per_ml: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
@@ -66,7 +95,9 @@ class Compound(Base):
     typical_dose_mcg_min: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     typical_dose_mcg_max: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
 
-    user: Mapped["User"] = relationship("User", back_populates="compounds")
+    creator: Mapped["User"] = relationship(
+        "User", foreign_keys=[created_by_user_id], back_populates="created_compounds"
+    )
     injections: Mapped[list["Injection"]] = relationship(
         "Injection", back_populates="compound", cascade="all, delete-orphan"
     )
@@ -106,8 +137,11 @@ class Injection(Base):
     __tablename__ = "injections"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    logged_by_user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=False
+    )
+    injected_by_user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=False
     )
     compound_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("compounds.id", ondelete="CASCADE"), nullable=False
@@ -121,7 +155,12 @@ class Injection(Base):
     dose_mode: Mapped[str] = mapped_column(String(20), default="total", nullable=False)
     component_snapshot: Mapped[list | None] = mapped_column(sa.JSON(), nullable=True)
 
-    user: Mapped["User"] = relationship("User", back_populates="injections")
+    logger: Mapped["User"] = relationship(
+        "User", foreign_keys=[logged_by_user_id], back_populates="logged_injections"
+    )
+    injector: Mapped["User"] = relationship(
+        "User", foreign_keys=[injected_by_user_id], back_populates="received_injections"
+    )
     compound: Mapped["Compound"] = relationship("Compound", back_populates="injections")
 
 
@@ -129,8 +168,11 @@ class Protocol(Base):
     __tablename__ = "protocols"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
+    assignee_user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_by_user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=False
     )
     compound_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("compounds.id", ondelete="CASCADE"), nullable=False
@@ -146,7 +188,12 @@ class Protocol(Base):
         Integer, ForeignKey("blend_components.id", ondelete="SET NULL"), nullable=True
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="protocols")
+    assignee: Mapped["User"] = relationship(
+        "User", foreign_keys=[assignee_user_id], back_populates="assigned_protocols"
+    )
+    creator: Mapped["User"] = relationship(
+        "User", foreign_keys=[created_by_user_id], back_populates="created_protocols"
+    )
     compound: Mapped["Compound"] = relationship("Compound", back_populates="protocols")
     reminder_logs: Mapped[list["ReminderLog"]] = relationship(
         "ReminderLog", back_populates="protocol", cascade="all, delete-orphan"

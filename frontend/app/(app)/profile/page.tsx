@@ -1,14 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { UserProfile } from "@/lib/types";
+import { useAuth } from "@/context/AuthContext";
 
 export default function ProfilePage() {
+  const { refreshUser } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [name, setName] = useState("");
   const [ntfyTopic, setNtfyTopic] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; error: string | null } | null>(null);
 
@@ -17,24 +24,42 @@ export default function ProfilePage() {
       .then((r) => r.json())
       .then((p: UserProfile) => {
         setProfile(p);
+        setName(p.name);
         setNtfyTopic(p.ntfy_topic ?? "");
       });
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password && password !== confirmPassword) {
+      setSaveError("Passwords do not match");
+      return;
+    }
     setSaving(true);
     setSaveStatus("idle");
+    setSaveError(null);
     try {
+      const body: Record<string, unknown> = {
+        ntfy_topic: ntfyTopic || null,
+        name: name || undefined,
+      };
+      if (password) body.password = password;
       const res = await apiFetch("/api/profile", {
         method: "PATCH",
-        body: JSON.stringify({ ntfy_topic: ntfyTopic || null }),
+        body: JSON.stringify(body),
       });
-      setSaveStatus(res.ok ? "saved" : "error");
       if (res.ok) {
         const updated: UserProfile = await res.json();
         setProfile(updated);
+        setPassword("");
+        setConfirmPassword("");
+        setSaveStatus("saved");
+        refreshUser();
         setTimeout(() => setSaveStatus("idle"), 2500);
+      } else {
+        const err = await res.json();
+        setSaveError(err.detail ?? "Failed to save");
+        setSaveStatus("error");
       }
     } finally {
       setSaving(false);
@@ -54,6 +79,7 @@ export default function ProfilePage() {
 
   const inputCls =
     "w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white";
+  const labelCls = "mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300";
 
   return (
     <div className="px-4 pt-6 pb-6">
@@ -61,16 +87,46 @@ export default function ProfilePage() {
 
       {profile && (
         <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <p className="font-semibold text-gray-900 dark:text-white">{profile.name}</p>
+          <div className="flex items-center gap-2">
+            <p className="font-semibold text-gray-900 dark:text-white">{profile.name}</p>
+            {profile.role === "admin" && (
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-400">
+                Admin
+              </span>
+            )}
+          </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">{profile.email}</p>
+          {profile.role === "admin" && (
+            <Link
+              href="/admin/users"
+              className="mt-2 inline-block text-sm text-blue-600 hover:underline dark:text-blue-400"
+            >
+              Manage users →
+            </Link>
+          )}
+        </div>
+      )}
+
+      {profile?.force_password_change && (
+        <div className="mb-4 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+          Please set a new password before continuing.
         </div>
       )}
 
       <form onSubmit={handleSave} className="space-y-5">
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-            ntfy topic URL
-          </label>
+          <label className={labelCls}>Name</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className={inputCls}
+            placeholder="Your name"
+          />
+        </div>
+
+        <div>
+          <label className={labelCls}>ntfy topic URL</label>
           <p className="mb-2 text-xs text-gray-400 dark:text-gray-500">
             Create a topic at{" "}
             <span className="font-mono text-blue-600">ntfy.sh</span> and paste the URL or topic name here.
@@ -86,11 +142,36 @@ export default function ProfilePage() {
           />
         </div>
 
+        <div>
+          <label className={labelCls}>New password <span className="font-normal text-gray-400">(leave blank to keep current)</span></label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={inputCls}
+            placeholder="New password"
+            autoComplete="new-password"
+          />
+        </div>
+        {password && (
+          <div>
+            <label className={labelCls}>Confirm new password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className={inputCls}
+              placeholder="Confirm password"
+              autoComplete="new-password"
+            />
+          </div>
+        )}
+
         {saveStatus === "saved" && (
           <p className="text-sm font-medium text-green-600 dark:text-green-400">Saved!</p>
         )}
-        {saveStatus === "error" && (
-          <p className="text-sm text-red-600 dark:text-red-400">Failed to save.</p>
+        {saveError && (
+          <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
         )}
 
         <div className="flex gap-3">
