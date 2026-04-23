@@ -206,3 +206,102 @@ describe("getTicks", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Anchor ↔ total mode consistency
+// ---------------------------------------------------------------------------
+
+// GLOW blend: GHK-Cu 50mg + TB-500 10mg + BPC-157 10mg (anchor), 2 mL BAC
+// Total blend = 70 mg, concentration = 35 mg/mL
+// BPC-157 is anchor (10/70 = 1/7 of total)
+// 250 mcg BPC-157 anchor → total dose = 250 / (1/7) = 1750 mcg → draw = 1750/1000/35 = 0.05 mL
+// Total mode 1750 mcg → draw = 1750/1000/35 = 0.05 mL — same draw, same breakdown
+
+const GLOW = [
+  { name: "GHK-Cu",  amount_mg: 50, is_anchor: false },
+  { name: "TB-500",  amount_mg: 10, is_anchor: false },
+  { name: "BPC-157", amount_mg: 10, is_anchor: true  },
+];
+
+describe("GLOW anchor mode — 250 mcg BPC-157", () => {
+  const r = calculateBlend(GLOW, 2, 250, "anchor");
+
+  it("returns a result", () => expect(r).not.toBeNull());
+  it("concentration = 35 mg/mL", () => expect(r!.concentrationMgPerMl).toBe(35));
+  it("draw volume ≈ 0.05 mL", () => expect(r!.drawVolumeMl).toBeCloseTo(0.05, 6));
+  it("doses per vial = 40", () => expect(r!.dosesPerVial).toBe(40));
+  it("GHK-Cu component = 1250 mcg", () => {
+    const ghk = r!.componentBreakdown.find((c) => c.name === "GHK-Cu");
+    expect(ghk!.dose_mcg).toBe(1250);
+  });
+  it("TB-500 component = 250 mcg", () => {
+    const tb = r!.componentBreakdown.find((c) => c.name === "TB-500");
+    expect(tb!.dose_mcg).toBe(250);
+  });
+  it("BPC-157 component = 250 mcg", () => {
+    const bpc = r!.componentBreakdown.find((c) => c.name === "BPC-157");
+    expect(bpc!.dose_mcg).toBe(250);
+  });
+  it("BPC-157 is_anchor = true", () => {
+    const bpc = r!.componentBreakdown.find((c) => c.name === "BPC-157");
+    expect(bpc!.is_anchor).toBe(true);
+  });
+});
+
+describe("GLOW total mode — 1750 mcg (equivalent to 250 mcg BPC-157 anchor)", () => {
+  const r = calculateBlend(GLOW, 2, 1750, "total");
+
+  it("returns a result", () => expect(r).not.toBeNull());
+  it("draw volume ≈ 0.05 mL", () => expect(r!.drawVolumeMl).toBeCloseTo(0.05, 6));
+  it("GHK-Cu component = 1250 mcg", () => {
+    const ghk = r!.componentBreakdown.find((c) => c.name === "GHK-Cu");
+    expect(ghk!.dose_mcg).toBe(1250);
+  });
+  it("TB-500 component = 250 mcg", () => {
+    const tb = r!.componentBreakdown.find((c) => c.name === "TB-500");
+    expect(tb!.dose_mcg).toBe(250);
+  });
+  it("BPC-157 component = 250 mcg", () => {
+    const bpc = r!.componentBreakdown.find((c) => c.name === "BPC-157");
+    expect(bpc!.dose_mcg).toBe(250);
+  });
+});
+
+describe("GLOW anchor vs total produce identical breakdowns", () => {
+  const anchor = calculateBlend(GLOW, 2, 250, "anchor");
+  const total  = calculateBlend(GLOW, 2, 1750, "total");
+
+  it("both non-null", () => { expect(anchor).not.toBeNull(); expect(total).not.toBeNull(); });
+  it("draw volumes match", () =>
+    expect(anchor!.drawVolumeMl).toBeCloseTo(total!.drawVolumeMl, 6));
+  it("component breakdown matches per component", () => {
+    for (const comp of anchor!.componentBreakdown) {
+      const match = total!.componentBreakdown.find((c) => c.name === comp.name);
+      expect(match).toBeDefined();
+      expect(comp.dose_mcg).toBe(match!.dose_mcg);
+    }
+  });
+});
+
+describe("calculateBlend — user-overridden anchor (GHK-Cu as anchor instead of BPC-157)", () => {
+  // Override: GHK-Cu becomes anchor, BPC-157 is not
+  const GLOW_GHK_ANCHOR = GLOW.map((c) => ({ ...c, is_anchor: c.name === "GHK-Cu" }));
+  // 250 mcg GHK-Cu anchor → fraction = 50/70 → total = 250 / (50/70) = 350 mcg
+  // draw = 350/1000/35 = 0.01 mL
+  const r = calculateBlend(GLOW_GHK_ANCHOR, 2, 250, "anchor");
+
+  it("returns a result", () => expect(r).not.toBeNull());
+  it("draw volume ≈ 0.01 mL", () => expect(r!.drawVolumeMl).toBeCloseTo(0.01, 6));
+  it("GHK-Cu component = 250 mcg", () => {
+    const ghk = r!.componentBreakdown.find((c) => c.name === "GHK-Cu");
+    expect(ghk!.dose_mcg).toBe(250);
+  });
+  it("GHK-Cu is_anchor = true", () => {
+    const ghk = r!.componentBreakdown.find((c) => c.name === "GHK-Cu");
+    expect(ghk!.is_anchor).toBe(true);
+  });
+  it("BPC-157 is_anchor = false", () => {
+    const bpc = r!.componentBreakdown.find((c) => c.name === "BPC-157");
+    expect(bpc!.is_anchor).toBe(false);
+  });
+});

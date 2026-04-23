@@ -4,8 +4,17 @@ import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 
 export const metadata: Metadata = {
-  title: "peptracker",
+  title: "PepTracker v1",
   description: "Personal peptide and medication tracker",
+  manifest: "/manifest.json",
+  themeColor: "#3b82f6",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.svg",    type: "image/svg+xml" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({

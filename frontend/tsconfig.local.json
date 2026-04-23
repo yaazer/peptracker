@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./*"],
+      "react":              ["./.local-types/node_modules/react"],
+      "react/jsx-runtime":  ["./.local-types/node_modules/react/jsx-runtime.js"],
+      "react-dom":          ["./.local-types/node_modules/react-dom"],
+      "next":               ["./.local-types/next"],
+      "next/*":             ["./.local-types/next/*"]
+    },
+    "typeRoots": [".local-types/@types", "node_modules/@types"]
+  },
+  "exclude": ["node_modules", ".local-types"]
+}

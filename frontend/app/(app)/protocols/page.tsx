@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Bell, Pencil, Plus, Trash2 } from "@/components/icons";
 import { apiFetch } from "@/lib/api";
 import { CompoundRead, ProtocolRead, timeUntil } from "@/lib/types";
+import { calculateBlend, type BlendComponentInput } from "@/lib/reconstitution";
+import BlendResultCard from "@/components/BlendResultCard";
 
 // ---------------------------------------------------------------------------
 // Cron helper
@@ -192,6 +194,7 @@ interface FormState {
   compound_id: string;
   dose_mcg: string;
   dose_mode: "total" | "anchor";
+  anchor_component_id: string;
   cron: CronState;
   active: boolean;
   notes: string;
@@ -201,6 +204,7 @@ const emptyForm = (): FormState => ({
   compound_id: "",
   dose_mcg: "",
   dose_mode: "total",
+  anchor_component_id: "",
   cron: { ...defaultCron },
   active: true,
   notes: "",
@@ -257,6 +261,7 @@ export default function ProtocolsPage() {
       compound_id: String(p.compound_id),
       dose_mcg: String(p.dose_mcg),
       dose_mode: (p.dose_mode as "total" | "anchor") ?? "total",
+      anchor_component_id: String(p.anchor_component_id ?? ""),
       cron: cronStateFromString(p.schedule_cron),
       active: p.active,
       notes: p.notes ?? "",
@@ -280,6 +285,7 @@ export default function ProtocolsPage() {
       active: form.active,
       notes: form.notes || null,
       dose_mode: form.dose_mode,
+      anchor_component_id: parseInt(form.anchor_component_id) || null,
     };
     try {
       const res = editing
@@ -378,7 +384,7 @@ export default function ProtocolsPage() {
                   <p className="mt-1 truncate text-xs text-gray-400 dark:text-gray-500">{p.notes}</p>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-1">
+              <div className="flex shrink-0 items-center gap-3">
                 {/* Active toggle */}
                 <button
                   onClick={() => toggleActive(p)}
@@ -424,14 +430,54 @@ export default function ProtocolsPage() {
               </button>
             </div>
 
+            {/* Derived values used throughout the form */}
+            {(() => {
+              const selectedCompound = compoundById(compounds, form.compound_id);
+              const isBlend = selectedCompound?.is_blend ?? false;
+              const blendComponents = selectedCompound?.blend_components ?? [];
+
+              // The anchor component the user has selected (falls back to compound default or first)
+              const selectedAnchorBc =
+                blendComponents.find((bc) => String(bc.id) === form.anchor_component_id) ??
+                blendComponents.find((bc) => bc.is_anchor) ??
+                blendComponents[0] ??
+                null;
+
+              // Build component inputs with is_anchor overridden by user's choice
+              const previewComponents: BlendComponentInput[] = blendComponents.map((bc) => ({
+                name: bc.name,
+                amount_mg: bc.amount_mg,
+                is_anchor: bc.id === selectedAnchorBc?.id,
+              }));
+
+              const bacMl = parseFloat(String(selectedCompound?.bac_water_ml ?? "")) || 0;
+              const doseMcgNum = parseInt(form.dose_mcg) || 0;
+              const previewResult =
+                isBlend && bacMl && doseMcgNum
+                  ? calculateBlend(previewComponents, bacMl, doseMcgNum, form.dose_mode)
+                  : null;
+
+              return (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className={labelCls}>Compound</label>
                 <select
+                  data-testid="compound-select"
                   value={form.compound_id}
-                  onChange={(e) =>
-                    setForm({ ...form, compound_id: e.target.value, dose_mode: "total" })
-                  }
+                  onChange={(e) => {
+                    const newId = e.target.value;
+                    const newCompound = compoundById(compounds, newId);
+                    const defaultAnchor =
+                      newCompound?.blend_components.find((bc) => bc.is_anchor) ??
+                      newCompound?.blend_components[0];
+                    setForm({
+                      ...form,
+                      compound_id: newId,
+                      dose_mode: "total",
+                      anchor_component_id: String(defaultAnchor?.id ?? ""),
+                      dose_mcg: "",
+                    });
+                  }}
                   required
                   className={inputCls}
                 >
@@ -445,44 +491,56 @@ export default function ProtocolsPage() {
               </div>
 
               {/* Dose mode — only for blend compounds */}
-              {compoundById(compounds, form.compound_id)?.is_blend && (
+              {isBlend && (
                 <div>
                   <label className={labelCls}>Dose mode</label>
                   <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
-                    {(["total", "anchor"] as const).map((mode) => {
-                      const c = compoundById(compounds, form.compound_id);
-                      const anchor = c?.blend_components.find((bc) => bc.is_anchor)
-                        ?? c?.blend_components[0];
-                      return (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() => setForm({ ...form, dose_mode: mode })}
-                          className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
-                            form.dose_mode === mode
-                              ? "bg-blue-600 text-white"
-                              : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
-                          }`}
-                        >
-                          {mode === "total" ? "Total blend" : `By ${anchor?.name ?? "anchor"}`}
-                        </button>
-                      );
-                    })}
+                    {(["total", "anchor"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setForm({ ...form, dose_mode: mode, dose_mcg: "" })}
+                        className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                          form.dose_mode === mode
+                            ? "bg-blue-600 text-white"
+                            : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                        }`}
+                      >
+                        {mode === "total" ? "Total blend" : "By anchor component"}
+                      </button>
+                    ))}
                   </div>
+                </div>
+              )}
+
+              {/* Anchor component selector — only in anchor mode */}
+              {isBlend && form.dose_mode === "anchor" && (
+                <div>
+                  <label className={labelCls}>Anchor component</label>
+                  <select
+                    data-testid="anchor-component-select"
+                    value={form.anchor_component_id}
+                    onChange={(e) =>
+                      setForm({ ...form, anchor_component_id: e.target.value, dose_mcg: "" })
+                    }
+                    className={inputCls}
+                  >
+                    {blendComponents.map((bc) => (
+                      <option key={bc.id} value={bc.id}>
+                        {bc.name} ({bc.amount_mg} mg)
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
 
               <div>
                 <label className={labelCls}>
-                  {(() => {
-                    const c = compoundById(compounds, form.compound_id);
-                    if (c?.is_blend && form.dose_mode === "anchor") {
-                      const anchor = c.blend_components.find((bc) => bc.is_anchor)
-                        ?? c.blend_components[0];
-                      return `${anchor?.name ?? "Anchor"} dose (mcg)`;
-                    }
-                    return "Dose (mcg)";
-                  })()}
+                  {isBlend && form.dose_mode === "anchor" && selectedAnchorBc
+                    ? `${selectedAnchorBc.name} dose (mcg)`
+                    : isBlend
+                    ? "Total blend dose (mcg)"
+                    : "Dose (mcg)"}
                 </label>
                 <input
                   type="number"
@@ -494,6 +552,24 @@ export default function ProtocolsPage() {
                   placeholder="e.g. 500"
                 />
               </div>
+
+              {/* Blend preview */}
+              {isBlend && (
+                <div>
+                  {bacMl > 0 ? (
+                    <BlendResultCard
+                      result={previewResult}
+                      doseMcg={doseMcgNum}
+                      doseMode={form.dose_mode}
+                      anchorName={selectedAnchorBc?.name}
+                    />
+                  ) : (
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      Set BAC water on this compound to see a dose preview.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className={labelCls}>Schedule</label>
@@ -543,6 +619,8 @@ export default function ProtocolsPage() {
                 </button>
               </div>
             </form>
+              );
+            })()}
           </div>
         </div>
       )}

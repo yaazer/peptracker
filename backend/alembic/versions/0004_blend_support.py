@@ -77,12 +77,7 @@ def upgrade() -> None:
     if not _column_exists(conn, "protocols", "anchor_component_id"):
         op.add_column(
             "protocols",
-            sa.Column(
-                "anchor_component_id",
-                sa.Integer,
-                sa.ForeignKey("blend_components.id", ondelete="SET NULL"),
-                nullable=True,
-            ),
+            sa.Column("anchor_component_id", sa.Integer, nullable=True),
         )
 
     # Backfill draw_volume_ml for existing single-compound injections

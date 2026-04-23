@@ -74,6 +74,13 @@ class CompoundCreate(BaseModel):
     default_syringe_ml: float | None = None
     is_blend: bool = False
     blend_components: list[BlendComponentCreate] | None = None
+    aliases: str | None = None
+    reference_url: str | None = None
+    reference_notes: str | None = None
+    molecular_weight: float | None = None
+    half_life_hours: float | None = None
+    typical_dose_mcg_min: float | None = None
+    typical_dose_mcg_max: float | None = None
 
 
 class CompoundUpdate(BaseModel):
@@ -88,6 +95,13 @@ class CompoundUpdate(BaseModel):
     default_syringe_ml: float | None = None
     is_blend: bool | None = None
     blend_components: list[BlendComponentCreate] | None = None
+    aliases: str | None = None
+    reference_url: str | None = None
+    reference_notes: str | None = None
+    molecular_weight: float | None = None
+    half_life_hours: float | None = None
+    typical_dose_mcg_min: float | None = None
+    typical_dose_mcg_max: float | None = None
 
 
 class CompoundRead(BaseModel):
@@ -107,6 +121,13 @@ class CompoundRead(BaseModel):
     default_syringe_ml: float | None
     is_blend: bool
     blend_components: list[BlendComponentRead]
+    aliases: str | None
+    reference_url: str | None
+    reference_notes: str | None
+    molecular_weight: float | None
+    half_life_hours: float | None
+    typical_dose_mcg_min: float | None
+    typical_dose_mcg_max: float | None
 
 
 # ---------------------------------------------------------------------------

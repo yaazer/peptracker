@@ -232,7 +232,7 @@ export function getTicks(type: SyringeType, capacityMl: number): Tick[] {
     const steps = Math.round(capacityMl / 0.05);
     for (let i = 0; i <= steps; i++) {
       const v = parseFloat((i * 0.05).toFixed(2));
-      const isMajor = Math.round(v * 10) % 1 === 0; // every 0.1
+      const isMajor = i % 2 === 0; // every 2 × 0.05 mL steps = every 0.1 mL
       ticks.push({
         position: v / capacityMl,
         value: v,

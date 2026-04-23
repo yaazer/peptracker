@@ -25,6 +25,7 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bypassWarning, setBypassWarning] = useState(false);
 
   const selectedCompound = compounds.find((c) => String(c.id) === compoundId) ?? null;
   const isBlend = selectedCompound?.is_blend ?? false;
@@ -32,10 +33,20 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
     ?? selectedCompound?.blend_components[0]
     ?? null;
 
+  const doseNum = parseInt(doseMcg) || 0;
+  const minDose = selectedCompound?.typical_dose_mcg_min ?? null;
+  const maxDose = selectedCompound?.typical_dose_mcg_max ?? null;
+  const showDoseWarning =
+    !bypassWarning &&
+    doseNum > 0 &&
+    (minDose != null || maxDose != null) &&
+    (doseNum < (minDose ?? -Infinity) || doseNum > (maxDose ?? Infinity));
+
   const handleCompoundChange = (id: string) => {
     setCompoundId(id);
     setDoseMode("total");
     setDoseMcg("");
+    setBypassWarning(false);
   };
 
   const reset = () => {
@@ -43,10 +54,12 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
     setNotes("");
     setInjectedAt(localDatetimeNow());
     setError(null);
+    setBypassWarning(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (showDoseWarning) return;
     if (!site) { setError("Pick an injection site"); return; }
     setError(null);
     setSubmitting(true);
@@ -141,11 +154,38 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
           type="number"
           min="1"
           value={doseMcg}
-          onChange={(e) => setDoseMcg(e.target.value)}
+          onChange={(e) => { setDoseMcg(e.target.value); setBypassWarning(false); }}
           required
           className={inputCls}
           placeholder="e.g. 500"
         />
+
+        {/* Dose range warning */}
+        {showDoseWarning && (
+          <div className="mt-2 rounded-lg border border-amber-600 bg-amber-900/30 px-3 py-2.5">
+            <p className="text-sm text-amber-300">
+              {doseNum < (minDose ?? Infinity)
+                ? `This dose (${doseNum} mcg) is below your typical minimum of ${minDose} mcg.`
+                : `This dose (${doseNum} mcg) exceeds your typical maximum of ${maxDose} mcg.`}
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setBypassWarning(true)}
+                className="text-xs text-amber-200 underline"
+              >
+                Log anyway
+              </button>
+              <button
+                type="button"
+                onClick={() => setDoseMcg("")}
+                className="text-xs text-gray-400 underline"
+              >
+                Change dose
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div>
@@ -198,7 +238,7 @@ export default function LogInjectionForm({ compounds, onSuccess }: Props) {
 
       <button
         type="submit"
-        disabled={submitting}
+        disabled={submitting || showDoseWarning}
         className="w-full rounded-lg bg-blue-600 py-4 text-base font-semibold text-white disabled:opacity-50"
       >
         {submitting ? "Logging…" : "Log injection"}

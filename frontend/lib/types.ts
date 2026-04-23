@@ -29,6 +29,13 @@ export interface CompoundRead {
   default_syringe_ml: number | null;
   is_blend: boolean;
   blend_components: BlendComponent[];
+  aliases: string | null;
+  reference_url: string | null;
+  reference_notes: string | null;
+  molecular_weight: number | null;
+  half_life_hours: number | null;
+  typical_dose_mcg_min: number | null;
+  typical_dose_mcg_max: number | null;
 }
 
 export interface InjectionRead {

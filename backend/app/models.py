@@ -58,6 +58,13 @@ class Compound(Base):
     default_syringe_type: Mapped[str | None] = mapped_column(String(10), nullable=True)
     default_syringe_ml: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     is_blend: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    aliases: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    reference_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    reference_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    molecular_weight: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    half_life_hours: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    typical_dose_mcg_min: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    typical_dose_mcg_max: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="compounds")
     injections: Mapped[list["Injection"]] = relationship(

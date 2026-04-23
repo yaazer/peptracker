@@ -67,6 +67,15 @@ def create_compound(
     )
 
 
+@router.get("/{compound_id}", response_model=CompoundRead)
+def get_compound(
+    compound_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _get_owned_compound(compound_id, current_user, db)
+
+
 @router.patch("/{compound_id}", response_model=CompoundRead)
 def update_compound(
     compound_id: int,

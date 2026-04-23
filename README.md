@@ -1,4 +1,4 @@
-# peptracker
+# PepTracker v1
 
 A personal peptide and medication tracking app.
 
