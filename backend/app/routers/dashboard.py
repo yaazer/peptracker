@@ -1,13 +1,13 @@
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from croniter import croniter
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Compound, Injection, Protocol, User
+from app.schedule_utils import _next_fire_structured
 from app.schemas import (
     DashboardResponse,
     LastByCompoundItem,
@@ -50,13 +50,14 @@ def _build_week_summary(injections: list[Injection], db: Session) -> WeekSummary
                 u["total_mcg"] += comp["dose_mcg"]
         else:
             name = compound_name(inj.compound_id)
+            dose = inj.dose_mcg or 0
             by_cpd[name]["count"] += 1
-            by_cpd[name]["total_mcg"] += inj.dose_mcg
+            by_cpd[name]["total_mcg"] += dose
             u = by_cpd[name]["users"].setdefault(
                 injector_id, {"user_name": injector_name, "count": 0, "total_mcg": 0}
             )
             u["count"] += 1
-            u["total_mcg"] += inj.dose_mcg
+            u["total_mcg"] += dose
 
     return WeekSummary(
         total_injections=len(injections),
@@ -101,10 +102,8 @@ def get_dashboard(
             .first()
         )
         base_dt = last_inj.injected_at if last_inj else now
-        try:
-            cron = croniter(protocol.schedule_cron, base_dt)
-            next_fire = cron.get_next(datetime)
-        except Exception:
+        next_fire = _next_fire_structured(protocol, base_dt)
+        if next_fire is None:
             continue
 
         compound = protocol.compound
@@ -115,6 +114,8 @@ def get_dashboard(
                 dose_mcg=protocol.dose_mcg,
                 next_fire_at=next_fire,
                 schedule_cron=protocol.schedule_cron,
+                schedule_type=protocol.schedule_type,
+                schedule_times=protocol.schedule_times,
                 assignee_user_id=protocol.assignee_user_id,
                 assignee_name=protocol.assignee.name if protocol.assignee else "Unknown",
             )
@@ -137,7 +138,7 @@ def get_dashboard(
         last_inj = (
             db.query(Injection)
             .options(joinedload(Injection.logger), joinedload(Injection.injector))
-            .filter(Injection.compound_id == compound.id)
+            .filter(Injection.compound_id == compound.id, Injection.status == "taken")
             .order_by(Injection.injected_at.desc())
             .first()
         )
@@ -165,7 +166,7 @@ def get_dashboard(
     week_injections = (
         db.query(Injection)
         .options(joinedload(Injection.injector))
-        .filter(Injection.injected_at >= week_start)
+        .filter(Injection.injected_at >= week_start, Injection.status == "taken")
         .all()
     )
 

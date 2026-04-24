@@ -33,7 +33,19 @@ vi.mock("@/components/icons", () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
+const SHARED = {
+  medication_type: "injection" as const, dose_unit: "mcg",
+  strength_amount: null, strength_unit: null, route: "subcutaneous", form_notes: null,
+  notes: null, archived: false, preset_vial_sizes: null,
+  default_syringe_type: null, default_syringe_ml: null,
+  aliases: null, reference_url: null, reference_notes: null,
+  molecular_weight: null, half_life_hours: null,
+  typical_dose_mcg_min: null, typical_dose_mcg_max: null,
+  created_by_user_id: 1, created_at: "2026-01-01T00:00:00",
+};
+
 const GLOW = {
+  ...SHARED,
   id: 1, name: "GLOW", is_blend: true,
   blend_components: [
     { id: 10, name: "GHK-Cu",  amount_mg: 50, is_anchor: false, position: 0, linked_compound_id: null },
@@ -41,39 +53,23 @@ const GLOW = {
     { id: 12, name: "BPC-157", amount_mg: 10, is_anchor: true,  position: 2, linked_compound_id: null },
   ],
   concentration_mg_per_ml: null, vial_size_mg: null, bac_water_ml: 2,
-  notes: null, archived: false, preset_vial_sizes: null,
-  default_syringe_type: null, default_syringe_ml: null,
-  aliases: null, reference_url: null, reference_notes: null,
-  molecular_weight: null, half_life_hours: null,
-  typical_dose_mcg_min: null, typical_dose_mcg_max: null,
-  user_id: 1, created_at: "2026-01-01T00:00:00",
 };
 
 const STACK2 = {
+  ...SHARED,
   id: 2, name: "Stack2", is_blend: true,
   blend_components: [
     { id: 20, name: "Peptide-A", amount_mg: 5, is_anchor: true,  position: 0, linked_compound_id: null },
     { id: 21, name: "Peptide-B", amount_mg: 5, is_anchor: false, position: 1, linked_compound_id: null },
   ],
   concentration_mg_per_ml: null, vial_size_mg: null, bac_water_ml: null,
-  notes: null, archived: false, preset_vial_sizes: null,
-  default_syringe_type: null, default_syringe_ml: null,
-  aliases: null, reference_url: null, reference_notes: null,
-  molecular_weight: null, half_life_hours: null,
-  typical_dose_mcg_min: null, typical_dose_mcg_max: null,
-  user_id: 1, created_at: "2026-01-01T00:00:00",
 };
 
 const SINGLE = {
+  ...SHARED,
   id: 3, name: "BPC-157 Solo", is_blend: false,
   blend_components: [],
   concentration_mg_per_ml: 5, vial_size_mg: 5, bac_water_ml: 1,
-  notes: null, archived: false, preset_vial_sizes: null,
-  default_syringe_type: null, default_syringe_ml: null,
-  aliases: null, reference_url: null, reference_notes: null,
-  molecular_weight: null, half_life_hours: null,
-  typical_dose_mcg_min: null, typical_dose_mcg_max: null,
-  user_id: 1, created_at: "2026-01-01T00:00:00",
 };
 
 vi.mock("@/lib/api", () => ({

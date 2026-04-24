@@ -21,7 +21,7 @@ export default function LogPage() {
 
   return (
     <div className="px-4 pt-6">
-      <h1 className="mb-6 text-xl font-bold text-gray-900 dark:text-white">Log Injection</h1>
+      <h1 className="mb-6 text-xl font-bold text-gray-900 dark:text-white">Log Dose</h1>
       <LogInjectionForm compounds={compounds} householdUsers={householdUsers} />
     </div>
   );

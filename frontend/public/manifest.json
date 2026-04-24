@@ -1,7 +1,7 @@
 {
-  "name": "PepTracker v1",
-  "short_name": "PepTracker",
-  "description": "Personal peptide and medication tracker",
+  "name": "DoseLog",
+  "short_name": "DoseLog",
+  "description": "Personal medication and peptide tracker",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#111827",

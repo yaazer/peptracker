@@ -173,7 +173,7 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
                   {activeWeekSummary.total_injections}
                 </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">injections</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">doses</p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -217,7 +217,7 @@ export default function DashboardPage() {
       {/* Last injection per compound */}
       {data && data.last_by_compound.length > 0 && (
         <section>
-          <SectionTitle>Last injection</SectionTitle>
+          <SectionTitle>Last dose</SectionTitle>
           <div className="space-y-2">
             {data.last_by_compound.map((item) => {
               const notCurrentUser = item.injected_by_user_id !== user?.id;
@@ -290,12 +290,12 @@ export default function DashboardPage() {
       {/* Empty state */}
       {data && data.recent.length === 0 && (
         <div className="mt-8 text-center">
-          <p className="text-gray-400">No injections yet.</p>
+          <p className="text-gray-400">No doses yet.</p>
           <button
             onClick={() => setFabOpen(true)}
             className="mt-2 text-sm text-blue-600"
           >
-            Log your first injection →
+            Log your first dose →
           </button>
         </div>
       )}
@@ -304,7 +304,7 @@ export default function DashboardPage() {
       <button
         onClick={() => setFabOpen(true)}
         className="fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 shadow-lg active:scale-95"
-        aria-label="Log injection"
+        aria-label="Log dose"
       >
         <Plus size={26} className="text-white" strokeWidth={2.5} />
       </button>
@@ -317,7 +317,7 @@ export default function DashboardPage() {
         >
           <div className="w-full max-w-md overflow-y-auto rounded-t-2xl bg-white px-5 pt-5 pb-8 sm:max-h-[90vh] sm:rounded-2xl dark:bg-gray-900">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Log injection</h2>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Log dose</h2>
               <button
                 onClick={() => setFabOpen(false)}
                 className="text-2xl leading-none text-gray-400 dark:text-gray-500"

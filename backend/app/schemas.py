@@ -1,9 +1,23 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator, model_validator
 
 from app.models import InjectionSite
+
+MEDICATION_TYPES = frozenset(
+    {"injection", "tablet", "capsule", "liquid", "topical", "sublingual", "inhaled", "other"}
+)
+DOSE_UNITS = frozenset(
+    {"mcg", "mg", "g", "ml", "tablet", "capsule", "drop", "puff", "patch", "other"}
+)
+ROUTES = frozenset(
+    {"oral", "subcutaneous", "intramuscular", "sublingual", "topical",
+     "inhaled", "intranasal", "rectal", "other"}
+)
+SCHEDULE_TYPES = frozenset({"daily", "weekly", "interval"})
+INTERVAL_UNITS = frozenset({"days", "hours", "weeks"})
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +107,12 @@ class BlendComponentRead(BaseModel):
 
 class CompoundCreate(BaseModel):
     name: str
+    medication_type: str = "injection"
+    dose_unit: str = "mcg"
+    strength_amount: float | None = None
+    strength_unit: str | None = None
+    route: str | None = None
+    form_notes: str | None = None
     concentration_mg_per_ml: Decimal | None = None
     vial_size_mg: Decimal | None = None
     bac_water_ml: Decimal | None = None
@@ -111,9 +131,41 @@ class CompoundCreate(BaseModel):
     typical_dose_mcg_min: float | None = None
     typical_dose_mcg_max: float | None = None
 
+    @model_validator(mode="after")
+    def validate_medication_fields(self) -> "CompoundCreate":
+        if self.medication_type not in MEDICATION_TYPES:
+            raise ValueError(f"medication_type must be one of {sorted(MEDICATION_TYPES)}")
+        if self.dose_unit not in DOSE_UNITS:
+            raise ValueError(f"dose_unit must be one of {sorted(DOSE_UNITS)}")
+        if self.route is not None and self.route not in ROUTES:
+            raise ValueError(f"route must be one of {sorted(ROUTES)}")
+
+        if self.medication_type == "injection":
+            if self.route is None:
+                self.route = "subcutaneous"
+        else:
+            # Non-injection: injection-specific fields must not be set
+            if self.concentration_mg_per_ml is not None or self.vial_size_mg is not None:
+                raise ValueError(
+                    "concentration_mg_per_ml and vial_size_mg are only valid for injection medications"
+                )
+            # Require strength fields for pill/liquid types
+            if self.medication_type in ("tablet", "capsule", "liquid"):
+                if self.strength_amount is None or not self.strength_unit:
+                    raise ValueError(
+                        f"strength_amount and strength_unit are required for {self.medication_type} medications"
+                    )
+        return self
+
 
 class CompoundUpdate(BaseModel):
     name: str | None = None
+    medication_type: str | None = None
+    dose_unit: str | None = None
+    strength_amount: float | None = None
+    strength_unit: str | None = None
+    route: str | None = None
+    form_notes: str | None = None
     concentration_mg_per_ml: Decimal | None = None
     vial_size_mg: Decimal | None = None
     bac_water_ml: Decimal | None = None
@@ -132,6 +184,16 @@ class CompoundUpdate(BaseModel):
     typical_dose_mcg_min: float | None = None
     typical_dose_mcg_max: float | None = None
 
+    @model_validator(mode="after")
+    def validate_medication_fields(self) -> "CompoundUpdate":
+        if self.medication_type is not None and self.medication_type not in MEDICATION_TYPES:
+            raise ValueError(f"medication_type must be one of {sorted(MEDICATION_TYPES)}")
+        if self.dose_unit is not None and self.dose_unit not in DOSE_UNITS:
+            raise ValueError(f"dose_unit must be one of {sorted(DOSE_UNITS)}")
+        if self.route is not None and self.route not in ROUTES:
+            raise ValueError(f"route must be one of {sorted(ROUTES)}")
+        return self
+
 
 class CompoundRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -139,6 +201,12 @@ class CompoundRead(BaseModel):
     id: int
     created_by_user_id: int
     name: str
+    medication_type: str
+    dose_unit: str
+    strength_amount: float | None
+    strength_unit: str | None
+    route: str | None
+    form_notes: str | None
     concentration_mg_per_ml: Decimal | None
     vial_size_mg: Decimal | None
     bac_water_ml: Decimal | None
@@ -165,12 +233,15 @@ class CompoundRead(BaseModel):
 
 class InjectionCreate(BaseModel):
     compound_id: int
-    dose_mcg: int
-    injection_site: InjectionSite
+    dose_mcg: int | None = None
+    injection_site: InjectionSite | None = None
     injected_at: datetime
     notes: str | None = None
     dose_mode: str = "total"
     injected_by_user_id: int | None = None  # defaults to logged_by on server
+    quantity: float | None = None
+    status: str = "taken"
+    skip_reason: str | None = None
 
 
 class InjectionUpdate(BaseModel):
@@ -179,6 +250,13 @@ class InjectionUpdate(BaseModel):
     injection_site: InjectionSite | None = None
     injected_at: datetime | None = None
     notes: str | None = None
+    quantity: float | None = None
+    status: str | None = None
+    skip_reason: str | None = None
+
+
+class SkipRequest(BaseModel):
+    skip_reason: str | None = None
 
 
 class InjectionRead(BaseModel):
@@ -188,49 +266,87 @@ class InjectionRead(BaseModel):
     logged_by_user_id: int
     injected_by_user_id: int
     compound_id: int
-    dose_mcg: int
-    injection_site: InjectionSite
+    dose_mcg: int | None
+    injection_site: InjectionSite | None
     injected_at: datetime
     notes: str | None
     created_at: datetime
     draw_volume_ml: float | None
     dose_mode: str
     component_snapshot: list | None
+    quantity: float | None
+    status: str
+    skip_reason: str | None
     logger_name: str
     injector_name: str
-
-    @classmethod
-    def from_orm_with_names(cls, inj: object) -> "InjectionRead":
-        """Build from ORM object, resolving logger/injector names from loaded relationships."""
-        obj = cls.model_validate(inj)
-        return obj
-
-    @staticmethod
-    def _resolve_names(inj: object) -> dict:
-        logger_name = inj.logger.name if inj.logger else "Unknown"
-        injector_name = inj.injector.name if inj.injector else "Unknown"
-        return {"logger_name": logger_name, "injector_name": injector_name}
 
 
 # ---------------------------------------------------------------------------
 # Protocol
 # ---------------------------------------------------------------------------
 
+import re as _re
+
+def _validate_schedule_fields(
+    schedule_type: str,
+    schedule_times: list[str],
+    schedule_days: list[int] | None,
+    schedule_interval_value: int | None,
+    schedule_interval_unit: str | None,
+) -> None:
+    if schedule_type not in SCHEDULE_TYPES:
+        raise ValueError(f"schedule_type must be one of {sorted(SCHEDULE_TYPES)}")
+    if not schedule_times:
+        raise ValueError("schedule_times must contain at least one entry")
+    for t in schedule_times:
+        if not _re.fullmatch(r"\d{2}:\d{2}", t):
+            raise ValueError(f"schedule_times entries must be HH:MM format, got {t!r}")
+    if schedule_type in ("interval", "weekly"):
+        if schedule_interval_value is None or schedule_interval_unit is None:
+            raise ValueError(
+                "schedule_interval_value and schedule_interval_unit are required for "
+                f"{schedule_type} schedules"
+            )
+        if schedule_interval_unit not in INTERVAL_UNITS:
+            raise ValueError(f"schedule_interval_unit must be one of {sorted(INTERVAL_UNITS)}")
+
+
+
 class ProtocolCreate(BaseModel):
     compound_id: int
-    dose_mcg: int
-    schedule_cron: str
+    dose_mcg: int | None = None
+    # Structured schedule — required for new protocols
+    schedule_type: str = "daily"
+    schedule_times: list[str] = ["08:00"]
+    schedule_days: list[int] | None = None   # None = all days
+    schedule_interval_value: int | None = None
+    schedule_interval_unit: str | None = None
+    schedule_start_date: date | None = None
     active: bool = True
     notes: str | None = None
     dose_mode: str = "total"
     anchor_component_id: int | None = None
     assignee_user_id: int | None = None  # admin may set; members get self assigned
 
+    @model_validator(mode="after")
+    def validate_schedule(self) -> "ProtocolCreate":
+        _validate_schedule_fields(
+            self.schedule_type, self.schedule_times,
+            self.schedule_days, self.schedule_interval_value,
+            self.schedule_interval_unit,
+        )
+        return self
+
 
 class ProtocolUpdate(BaseModel):
     compound_id: int | None = None
     dose_mcg: int | None = None
-    schedule_cron: str | None = None
+    schedule_type: str | None = None
+    schedule_times: list[str] | None = None
+    schedule_days: list[int] | None = None
+    schedule_interval_value: int | None = None
+    schedule_interval_unit: str | None = None
+    schedule_start_date: date | None = None
     active: bool | None = None
     notes: str | None = None
     dose_mode: str | None = None
@@ -247,8 +363,14 @@ class ProtocolRead(BaseModel):
     created_by_user_id: int
     compound_id: int
     compound_name: str
-    dose_mcg: int
+    dose_mcg: int | None
     schedule_cron: str
+    schedule_type: str
+    schedule_times: list[str] | None
+    schedule_days: list[int] | None
+    schedule_interval_value: int | None
+    schedule_interval_unit: str | None
+    schedule_start_date: date | None
     active: bool
     notes: str | None
     created_at: datetime
@@ -281,9 +403,11 @@ class ReminderLogRead(BaseModel):
 class NextDoseItem(BaseModel):
     protocol_id: int
     compound_name: str
-    dose_mcg: int
+    dose_mcg: int | None
     next_fire_at: datetime
     schedule_cron: str
+    schedule_type: str
+    schedule_times: list[str] | None
     assignee_user_id: int
     assignee_name: str
 
@@ -291,8 +415,8 @@ class NextDoseItem(BaseModel):
 class LastByCompoundItem(BaseModel):
     compound_id: int
     compound_name: str
-    dose_mcg: int
-    injection_site: InjectionSite
+    dose_mcg: int | None
+    injection_site: InjectionSite | None
     injected_at: datetime
     injected_by_user_id: int
     injector_name: str

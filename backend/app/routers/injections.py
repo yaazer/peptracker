@@ -7,9 +7,27 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Compound, Injection, User
-from app.schemas import InjectionCreate, InjectionRead, InjectionUpdate
+from app.schemas import InjectionCreate, InjectionRead, InjectionUpdate, SkipRequest
 
 router = APIRouter(prefix="/api/injections", tags=["injections"])
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _compute_pill_dose_mcg(compound: Compound, quantity: float) -> int | None:
+    """Return dose_mcg equivalent for a pill/liquid dose, or None if not computable."""
+    if compound.strength_amount is None or not compound.strength_unit:
+        return None
+    unit = (compound.strength_unit or "").lower().strip()
+    if unit == "mcg":
+        return round(compound.strength_amount * quantity)
+    if unit == "mg":
+        return round(compound.strength_amount * quantity * 1000)
+    if unit in ("mg/ml", "mg/ml"):
+        return round(compound.strength_amount * quantity * 1000)
+    return None
 
 
 def _injection_to_read(inj: Injection) -> InjectionRead:
@@ -26,6 +44,9 @@ def _injection_to_read(inj: Injection) -> InjectionRead:
         draw_volume_ml=inj.draw_volume_ml,
         dose_mode=inj.dose_mode,
         component_snapshot=inj.component_snapshot,
+        quantity=inj.quantity,
+        status=inj.status,
+        skip_reason=inj.skip_reason,
         logger_name=inj.logger.name if inj.logger else "Unknown",
         injector_name=inj.injector.name if inj.injector else "Unknown",
     )
@@ -78,6 +99,10 @@ def _compute_blend_data(
     return draw_volume_ml, snapshot
 
 
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
 @router.get("", response_model=list[InjectionRead])
 def list_injections(
     compound_id: Optional[int] = None,
@@ -117,7 +142,7 @@ def create_injection(
     if compound is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compound not found")
 
-    # Resolve who physically received the injection
+    # Resolve who physically received the dose
     if body.injected_by_user_id is not None and body.injected_by_user_id != current_user.id:
         injector = db.get(User, body.injected_by_user_id)
         if not injector or injector.deleted_at is not None:
@@ -128,34 +153,107 @@ def create_injection(
     else:
         injected_by_id = current_user.id
 
-    draw_volume_ml: float | None = None
-    component_snapshot: list | None = None
+    # ---- Injection-type validation ----
+    if compound.medication_type == "injection":
+        if body.dose_mcg is None:
+            raise HTTPException(422, "dose_mcg is required for injection medications")
+        if body.injection_site is None:
+            raise HTTPException(422, "injection_site is required for injection medications")
 
-    if compound.is_blend:
-        draw_volume_ml, component_snapshot = _compute_blend_data(
-            compound, body.dose_mcg, body.dose_mode
+        draw_volume_ml: float | None = None
+        component_snapshot: list | None = None
+
+        if compound.is_blend:
+            draw_volume_ml, component_snapshot = _compute_blend_data(
+                compound, body.dose_mcg, body.dose_mode
+            )
+        elif compound.concentration_mg_per_ml:
+            conc = float(compound.concentration_mg_per_ml)
+            if conc > 0:
+                draw_volume_ml = body.dose_mcg / 1000.0 / conc
+
+        injection = Injection(
+            logged_by_user_id=current_user.id,
+            injected_by_user_id=injected_by_id,
+            compound_id=body.compound_id,
+            dose_mcg=body.dose_mcg,
+            injection_site=body.injection_site,
+            injected_at=body.injected_at,
+            notes=body.notes,
+            dose_mode=body.dose_mode,
+            draw_volume_ml=draw_volume_ml,
+            component_snapshot=component_snapshot,
+            quantity=None,
+            status=body.status,
+            skip_reason=body.skip_reason,
         )
-    elif compound.concentration_mg_per_ml:
-        conc = float(compound.concentration_mg_per_ml)
-        if conc > 0:
-            draw_volume_ml = body.dose_mcg / 1000.0 / conc
 
-    injection = Injection(
-        logged_by_user_id=current_user.id,
-        injected_by_user_id=injected_by_id,
-        compound_id=body.compound_id,
-        dose_mcg=body.dose_mcg,
-        injection_site=body.injection_site,
-        injected_at=body.injected_at,
-        notes=body.notes,
-        dose_mode=body.dose_mode,
-        draw_volume_ml=draw_volume_ml,
-        component_snapshot=component_snapshot,
-    )
+    # ---- Non-injection (pill / liquid / etc.) ----
+    else:
+        if body.quantity is None:
+            raise HTTPException(422, "quantity is required for non-injection medications")
+
+        computed_dose_mcg = _compute_pill_dose_mcg(compound, body.quantity)
+
+        injection = Injection(
+            logged_by_user_id=current_user.id,
+            injected_by_user_id=injected_by_id,
+            compound_id=body.compound_id,
+            dose_mcg=computed_dose_mcg,
+            injection_site=None,
+            injected_at=body.injected_at,
+            notes=body.notes,
+            dose_mode="total",
+            draw_volume_ml=None,
+            component_snapshot=None,
+            quantity=body.quantity,
+            status=body.status,
+            skip_reason=body.skip_reason,
+        )
+
     db.add(injection)
     db.commit()
     db.refresh(injection)
     return _injection_to_read(_load_injection(injection.id, db))
+
+
+@router.post(
+    "/{injection_id}/skip",
+    response_model=InjectionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def skip_injection(
+    injection_id: int,
+    body: SkipRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Mark a scheduled dose as skipped. Creates a new Injection record with
+    status='skipped'. The injection_id in the path is used only to look up
+    the compound/protocol context — it does NOT modify the existing record.
+    This endpoint logs the skip against the same compound as the referenced injection.
+    """
+    ref = _load_injection(injection_id, db)
+    skip = Injection(
+        logged_by_user_id=current_user.id,
+        injected_by_user_id=current_user.id,
+        compound_id=ref.compound_id,
+        dose_mcg=None,
+        injection_site=None,
+        injected_at=datetime.utcnow(),
+        notes=None,
+        dose_mode="total",
+        draw_volume_ml=None,
+        component_snapshot=None,
+        quantity=None,
+        status="skipped",
+        skip_reason=body.skip_reason,
+    )
+    db.add(skip)
+    db.commit()
+    db.refresh(skip)
+    return _injection_to_read(_load_injection(skip.id, db))
 
 
 @router.patch("/{injection_id}", response_model=InjectionRead)

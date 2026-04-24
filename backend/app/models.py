@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import date, datetime
 
 import sqlalchemy as sa
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
@@ -77,6 +77,13 @@ class Compound(Base):
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # medication_type: injection | tablet | capsule | liquid | topical | sublingual | inhaled | other
+    medication_type: Mapped[str] = mapped_column(String(20), nullable=False, default="injection")
+    dose_unit: Mapped[str] = mapped_column(String(20), nullable=False, default="mcg")
+    strength_amount: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    strength_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    route: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    form_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     concentration_mg_per_ml: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
     vial_size_mg: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
     bac_water_ml: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
@@ -146,14 +153,17 @@ class Injection(Base):
     compound_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("compounds.id", ondelete="CASCADE"), nullable=False
     )
-    dose_mcg: Mapped[int] = mapped_column(Integer, nullable=False)
-    injection_site: Mapped[InjectionSite] = mapped_column(Enum(InjectionSite), nullable=False)
+    dose_mcg: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    injection_site: Mapped[InjectionSite | None] = mapped_column(Enum(InjectionSite), nullable=True)
     injected_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     draw_volume_ml: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     dose_mode: Mapped[str] = mapped_column(String(20), default="total", nullable=False)
     component_snapshot: Mapped[list | None] = mapped_column(sa.JSON(), nullable=True)
+    quantity: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="taken")
+    skip_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     logger: Mapped["User"] = relationship(
         "User", foreign_keys=[logged_by_user_id], back_populates="logged_injections"
@@ -177,8 +187,15 @@ class Protocol(Base):
     compound_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("compounds.id", ondelete="CASCADE"), nullable=False
     )
-    dose_mcg: Mapped[int] = mapped_column(Integer, nullable=False)
+    dose_mcg: Mapped[int | None] = mapped_column(Integer, nullable=True)
     schedule_cron: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Structured schedule (replaces schedule_cron for new protocols)
+    schedule_type: Mapped[str] = mapped_column(String(20), nullable=False, default="daily")
+    schedule_times: Mapped[list | None] = mapped_column(sa.JSON(), nullable=True)
+    schedule_days: Mapped[list | None] = mapped_column(sa.JSON(), nullable=True)
+    schedule_interval_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    schedule_interval_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    schedule_start_date: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

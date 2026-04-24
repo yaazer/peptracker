@@ -4,8 +4,8 @@ import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 
 export const metadata: Metadata = {
-  title: "PepTracker v1",
-  description: "Personal peptide and medication tracker",
+  title: "DoseLog",
+  description: "Personal medication and peptide tracker",
   manifest: "/manifest.json",
   themeColor: "#3b82f6",
   icons: {

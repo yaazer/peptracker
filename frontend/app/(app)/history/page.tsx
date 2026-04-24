@@ -62,7 +62,7 @@ export default function HistoryPage() {
     isAdmin || inj.logged_by_user_id === currentUser?.id;
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Delete this injection record?")) return;
+    if (!confirm("Delete this dose record?")) return;
     const res = await apiFetch(`/api/injections/${id}`, { method: "DELETE" });
     if (res.ok || res.status === 204) {
       setInjections((prev) => prev.filter((i) => i.id !== id));
@@ -224,10 +224,16 @@ export default function HistoryPage() {
                       </span>
                     </div>
                     <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
-                      {inj.dose_mcg} mcg
+                      {inj.dose_mcg != null
+                        ? `${inj.dose_mcg} mcg`
+                        : inj.quantity != null
+                        ? `${inj.quantity} units`
+                        : "—"}
                       {inj.dose_mode === "anchor" && " (anchor)"}
-                      {" · "}
-                      {siteLabel(inj.injection_site)}
+                      {inj.injection_site && ` · ${siteLabel(inj.injection_site)}`}
+                      {inj.status === "skipped" && (
+                        <span className="ml-1 text-amber-500">skipped</span>
+                      )}
                       {inj.draw_volume_ml != null && (
                         <span className="ml-1 text-blue-600">
                           · {(inj.draw_volume_ml * 100).toFixed(1)} units

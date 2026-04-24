@@ -1,13 +1,12 @@
 from datetime import datetime, timezone
 
-from croniter import croniter
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
-from app.auth.permissions import require_admin_or_assignee
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Compound, Protocol, User
+from app.schedule_utils import _next_fire_structured
 from app.schemas import ProtocolCreate, ProtocolRead, ProtocolUpdate
 
 router = APIRouter(prefix="/api/protocols", tags=["protocols"])
@@ -17,16 +16,9 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def _next_fire(schedule_cron: str, anchor: datetime) -> datetime | None:
-    try:
-        return croniter(schedule_cron, anchor).get_next(datetime)
-    except Exception:
-        return None
-
-
 def _to_read(p: Protocol) -> ProtocolRead:
     anchor = p.last_fired_at or p.created_at
-    next_fire = _next_fire(p.schedule_cron, anchor)
+    next_fire = _next_fire_structured(p, anchor)
     return ProtocolRead(
         id=p.id,
         assignee_user_id=p.assignee_user_id,
@@ -36,6 +28,12 @@ def _to_read(p: Protocol) -> ProtocolRead:
         compound_name=p.compound.name,
         dose_mcg=p.dose_mcg,
         schedule_cron=p.schedule_cron,
+        schedule_type=p.schedule_type,
+        schedule_times=p.schedule_times,
+        schedule_days=p.schedule_days,
+        schedule_interval_value=p.schedule_interval_value,
+        schedule_interval_unit=p.schedule_interval_unit,
+        schedule_start_date=p.schedule_start_date,
         active=p.active,
         notes=p.notes,
         created_at=p.created_at,
@@ -79,9 +77,6 @@ def create_protocol(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not croniter.is_valid(body.schedule_cron):
-        raise HTTPException(422, "Invalid cron expression")
-
     compound = db.query(Compound).filter(Compound.id == body.compound_id).first()
     if not compound:
         raise HTTPException(404, "Compound not found")
@@ -102,7 +97,13 @@ def create_protocol(
         created_by_user_id=user.id,
         compound_id=body.compound_id,
         dose_mcg=body.dose_mcg,
-        schedule_cron=body.schedule_cron,
+        schedule_cron="",  # legacy field kept for DB compat; structured fields drive scheduling
+        schedule_type=body.schedule_type,
+        schedule_times=body.schedule_times,
+        schedule_days=body.schedule_days,
+        schedule_interval_value=body.schedule_interval_value,
+        schedule_interval_unit=body.schedule_interval_unit,
+        schedule_start_date=body.schedule_start_date,
         active=body.active,
         notes=body.notes,
         dose_mode=body.dose_mode,
@@ -121,14 +122,11 @@ def update_protocol(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Inline permission check (can't use factory dependency cleanly with body)
     p = _load_protocol(protocol_id, db)
     if user.role != "admin" and user.id != p.assignee_user_id:
         raise HTTPException(403, "Only the assignee or an admin can modify this protocol")
 
     data = body.model_dump(exclude_unset=True)
-    if "schedule_cron" in data and not croniter.is_valid(data["schedule_cron"]):
-        raise HTTPException(422, "Invalid cron expression")
 
     # Members cannot change the assignee
     if "assignee_user_id" in data and user.role != "admin":

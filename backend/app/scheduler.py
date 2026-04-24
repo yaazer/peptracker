@@ -3,11 +3,11 @@ from datetime import datetime, timezone
 
 import httpx
 from apscheduler.schedulers.background import BackgroundScheduler
-from croniter import croniter
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.database import SessionLocal
 from app.models import Compound, Protocol, ReminderLog
+from app.schedule_utils import _next_fire_structured
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +96,8 @@ def check_and_fire() -> None:
                 if assignee:
                     # Log a delivery failure so the admin can see it in reminder logs
                     anchor = protocol.last_fired_at or protocol.created_at
-                    try:
-                        next_fire = croniter(protocol.schedule_cron, anchor).get_next(datetime)
-                    except Exception:
+                    next_fire = _next_fire_structured(protocol, anchor)
+                    if next_fire is None:
                         continue
                     if next_fire <= now:
                         log = ReminderLog(
@@ -113,16 +112,15 @@ def check_and_fire() -> None:
                 continue
 
             anchor = protocol.last_fired_at or protocol.created_at
-            try:
-                next_fire = croniter(protocol.schedule_cron, anchor).get_next(datetime)
-            except Exception:
+            next_fire = _next_fire_structured(protocol, anchor)
+            if next_fire is None:
                 continue
 
             if next_fire > now:
                 continue
 
             body = _build_message(protocol, protocol.compound, assignee.name)
-            delivered, error = _send_ntfy(assignee.ntfy_topic, "PepTracker v1", body)
+            delivered, error = _send_ntfy(assignee.ntfy_topic, "DoseLog", body)
 
             log = ReminderLog(
                 protocol_id=protocol.id,

@@ -17,11 +17,23 @@ interface Props {
   onSuccess?: () => void;
 }
 
+const MEDICATION_TYPE_LABELS: Record<string, string> = {
+  injection: "Injection",
+  tablet: "Tablet",
+  capsule: "Capsule",
+  liquid: "Liquid",
+  topical: "Topical",
+  sublingual: "Sublingual",
+  inhaled: "Inhaled",
+  other: "Other",
+};
+
 export default function LogInjectionForm({ compounds, householdUsers, onSuccess }: Props) {
   const { user: currentUser } = useAuth();
 
   const [compoundId, setCompoundId] = useState("");
   const [doseMcg, setDoseMcg] = useState("");
+  const [quantity, setQuantity] = useState("");
   const [doseMode, setDoseMode] = useState<"total" | "anchor">("total");
   const [site, setSite] = useState("");
   const [injectedAt, setInjectedAt] = useState(localDatetimeNow());
@@ -35,19 +47,34 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
   const [bypassWarning, setBypassWarning] = useState(false);
 
   const selectedCompound = compounds.find((c) => String(c.id) === compoundId) ?? null;
+  const isInjection = (selectedCompound?.medication_type ?? "injection") === "injection";
   const isBlend = selectedCompound?.is_blend ?? false;
-  const anchorComponent = selectedCompound?.blend_components.find((bc) => bc.is_anchor)
-    ?? selectedCompound?.blend_components[0]
-    ?? null;
+  const anchorComponent =
+    selectedCompound?.blend_components.find((bc) => bc.is_anchor) ??
+    selectedCompound?.blend_components[0] ??
+    null;
 
   const doseNum = parseInt(doseMcg) || 0;
   const minDose = selectedCompound?.typical_dose_mcg_min ?? null;
   const maxDose = selectedCompound?.typical_dose_mcg_max ?? null;
   const showDoseWarning =
     !bypassWarning &&
+    isInjection &&
     doseNum > 0 &&
     (minDose != null || maxDose != null) &&
     (doseNum < (minDose ?? -Infinity) || doseNum > (maxDose ?? Infinity));
+
+  // Estimated dose for pill/liquid, shown as info text
+  const estimatedDoseMcg = (() => {
+    if (isInjection || !selectedCompound || !quantity) return null;
+    const qty = parseFloat(quantity);
+    if (!qty || !selectedCompound.strength_amount || !selectedCompound.strength_unit) return null;
+    const unit = selectedCompound.strength_unit.toLowerCase().trim();
+    if (unit === "mcg") return Math.round(selectedCompound.strength_amount * qty);
+    if (unit === "mg") return Math.round(selectedCompound.strength_amount * qty * 1000);
+    if (unit === "mg/ml") return Math.round(selectedCompound.strength_amount * qty * 1000);
+    return null;
+  })();
 
   const isLoggingForOther =
     currentUser && injectedById && String(currentUser.id) !== injectedById;
@@ -57,11 +84,15 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
     setCompoundId(id);
     setDoseMode("total");
     setDoseMcg("");
+    setQuantity("");
+    setSite("");
     setBypassWarning(false);
   };
 
   const reset = () => {
     setDoseMcg("");
+    setQuantity("");
+    setSite("");
     setNotes("");
     setInjectedAt(localDatetimeNow());
     setError(null);
@@ -72,28 +103,40 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (showDoseWarning) return;
-    if (!site) { setError("Pick an injection site"); return; }
+
+    if (isInjection && !site) {
+      setError("Pick an injection site");
+      return;
+    }
+
     setError(null);
     setSubmitting(true);
     try {
       const body: Record<string, unknown> = {
         compound_id: parseInt(compoundId),
-        dose_mcg: parseInt(doseMcg),
-        injection_site: site,
         injected_at: new Date(injectedAt).toISOString(),
         notes: notes || null,
-        dose_mode: isBlend ? doseMode : "total",
       };
+
+      if (isInjection) {
+        body.dose_mcg = parseInt(doseMcg);
+        body.injection_site = site;
+        body.dose_mode = isBlend ? doseMode : "total";
+      } else {
+        body.quantity = parseFloat(quantity);
+      }
+
       if (injectedById && injectedById !== String(currentUser?.id)) {
         body.injected_by_user_id = parseInt(injectedById);
       }
+
       const res = await apiFetch("/api/injections", {
         method: "POST",
         body: JSON.stringify(body),
       });
       if (!res.ok) {
         const err = await res.json();
-        setError(err.detail ?? "Failed to log injection");
+        setError(err.detail ?? "Failed to log dose");
         return;
       }
       setSuccess(true);
@@ -107,7 +150,8 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
     }
   };
 
-  const inputCls = "w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500";
+  const inputCls =
+    "w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500";
   const labelCls = "mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300";
 
   return (
@@ -118,10 +162,10 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
         </div>
       )}
 
-      {/* Who injected this? */}
+      {/* Who is taking this? */}
       {householdUsers.length > 1 && (
         <div>
-          <label className={labelCls}>Who injected this?</label>
+          <label className={labelCls}>Who is taking this?</label>
           <select
             value={injectedById}
             onChange={(e) => setInjectedById(e.target.value)}
@@ -129,126 +173,168 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
           >
             {householdUsers.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.name}{u.id === currentUser?.id ? " (me)" : ""}
+                {u.name}
+                {u.id === currentUser?.id ? " (me)" : ""}
               </option>
             ))}
           </select>
           {isLoggingForOther && injectedByUser && (
             <p className="mt-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
-              Logging an injection for {injectedByUser.name} — they will see this in their history.
+              Logging a dose for {injectedByUser.name} — they will see this in their history.
             </p>
           )}
         </div>
       )}
 
+      {/* Medication selector */}
       <div>
-        <label className={labelCls}>Compound</label>
+        <label className={labelCls}>Medication</label>
         <select
           value={compoundId}
           onChange={(e) => handleCompoundChange(e.target.value)}
           required
           className={inputCls}
         >
-          <option value="">Select compound…</option>
+          <option value="">Select medication…</option>
           {compounds.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}{c.is_blend ? " (blend)" : ""}
+              {c.name}
+              {c.is_blend ? " (blend)" : ""}
+              {c.medication_type !== "injection"
+                ? ` · ${MEDICATION_TYPE_LABELS[c.medication_type] ?? c.medication_type}`
+                : ""}
             </option>
           ))}
         </select>
       </div>
 
-      {isBlend && (
-        <div>
-          <label className={labelCls}>Dose mode</label>
-          <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
-            {(["total", "anchor"] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => { setDoseMode(mode); setDoseMcg(""); }}
-                className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
-                  doseMode === mode
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
-                }`}
-              >
-                {mode === "total" ? "Total blend" : `By ${anchorComponent?.name ?? "anchor"}`}
-              </button>
-            ))}
+      {/* ---- Injection-specific fields ---- */}
+      {isInjection && (
+        <>
+          {isBlend && (
+            <div>
+              <label className={labelCls}>Dose mode</label>
+              <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+                {(["total", "anchor"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => {
+                      setDoseMode(mode);
+                      setDoseMcg("");
+                    }}
+                    className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                      doseMode === mode
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                    }`}
+                  >
+                    {mode === "total" ? "Total blend" : `By ${anchorComponent?.name ?? "anchor"}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className={labelCls}>
+              {isBlend && doseMode === "anchor" && anchorComponent
+                ? `${anchorComponent.name} dose (mcg)`
+                : isBlend
+                ? "Total dose (mcg)"
+                : "Dose (mcg)"}
+            </label>
+            <input
+              type="number"
+              min="1"
+              value={doseMcg}
+              onChange={(e) => {
+                setDoseMcg(e.target.value);
+                setBypassWarning(false);
+              }}
+              required
+              className={inputCls}
+              placeholder="e.g. 500"
+            />
+
+            {showDoseWarning && (
+              <div className="mt-2 rounded-lg border border-amber-600 bg-amber-900/30 px-3 py-2.5">
+                <p className="text-sm text-amber-300">
+                  {doseNum < (minDose ?? Infinity)
+                    ? `This dose (${doseNum} mcg) is below your typical minimum of ${minDose} mcg.`
+                    : `This dose (${doseNum} mcg) exceeds your typical maximum of ${maxDose} mcg.`}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBypassWarning(true)}
+                    className="text-xs text-amber-200 underline"
+                  >
+                    Log anyway
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDoseMcg("")}
+                    className="text-xs text-gray-400 underline"
+                  >
+                    Change dose
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
+
+          <div>
+            <label className={labelCls}>Injection site</label>
+            <div className="grid grid-cols-2 gap-2">
+              {INJECTION_SITES.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setSite(value)}
+                  className={`rounded-lg border py-3.5 text-sm font-medium transition-colors ${
+                    value === "other" ? "col-span-2" : ""
+                  } ${
+                    site === value
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-gray-300 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ---- Non-injection (pill / liquid / etc.) fields ---- */}
+      {!isInjection && selectedCompound && (
+        <div>
+          <label className={labelCls}>
+            Quantity
+            {selectedCompound.dose_unit ? ` (${selectedCompound.dose_unit})` : ""}
+          </label>
+          <input
+            type="number"
+            min="0.1"
+            step="0.5"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            required
+            className={inputCls}
+            placeholder="e.g. 1"
+          />
+          {estimatedDoseMcg !== null && (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              ≈ {estimatedDoseMcg.toLocaleString()} mcg
+            </p>
+          )}
         </div>
       )}
 
       <div>
-        <label className={labelCls}>
-          {isBlend && doseMode === "anchor" && anchorComponent
-            ? `${anchorComponent.name} dose (mcg)`
-            : isBlend
-            ? "Total dose (mcg)"
-            : "Dose (mcg)"}
-        </label>
-        <input
-          type="number"
-          min="1"
-          value={doseMcg}
-          onChange={(e) => { setDoseMcg(e.target.value); setBypassWarning(false); }}
-          required
-          className={inputCls}
-          placeholder="e.g. 500"
-        />
-
-        {showDoseWarning && (
-          <div className="mt-2 rounded-lg border border-amber-600 bg-amber-900/30 px-3 py-2.5">
-            <p className="text-sm text-amber-300">
-              {doseNum < (minDose ?? Infinity)
-                ? `This dose (${doseNum} mcg) is below your typical minimum of ${minDose} mcg.`
-                : `This dose (${doseNum} mcg) exceeds your typical maximum of ${maxDose} mcg.`}
-            </p>
-            <div className="mt-2 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setBypassWarning(true)}
-                className="text-xs text-amber-200 underline"
-              >
-                Log anyway
-              </button>
-              <button
-                type="button"
-                onClick={() => setDoseMcg("")}
-                className="text-xs text-gray-400 underline"
-              >
-                Change dose
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div>
-        <label className={labelCls}>Injection site</label>
-        <div className="grid grid-cols-2 gap-2">
-          {INJECTION_SITES.map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setSite(value)}
-              className={`rounded-lg border py-3.5 text-sm font-medium transition-colors ${
-                value === "other" ? "col-span-2" : ""
-              } ${
-                site === value
-                  ? "border-blue-600 bg-blue-600 text-white"
-                  : "border-gray-300 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label className={labelCls}>Date & time</label>
+        <label className={labelCls}>Date &amp; time</label>
         <input
           type="datetime-local"
           value={injectedAt}
@@ -260,7 +346,8 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
 
       <div>
         <label className={labelCls}>
-          Notes <span className="font-normal text-gray-400 dark:text-gray-500">(optional)</span>
+          Notes{" "}
+          <span className="font-normal text-gray-400 dark:text-gray-500">(optional)</span>
         </label>
         <textarea
           value={notes}
@@ -278,7 +365,7 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
         disabled={submitting || showDoseWarning}
         className="w-full rounded-lg bg-blue-600 py-4 text-base font-semibold text-white disabled:opacity-50"
       >
-        {submitting ? "Logging…" : "Log injection"}
+        {submitting ? "Logging…" : isInjection ? "Log injection" : "Log dose"}
       </button>
     </form>
   );

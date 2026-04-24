@@ -11,155 +11,232 @@ import UserAttributionChip from "@/components/UserAttributionChip";
 import { useAuth } from "@/context/AuthContext";
 
 // ---------------------------------------------------------------------------
-// Cron helper
+// Schedule helpers
 // ---------------------------------------------------------------------------
 
-type ScheduleType = "daily" | "every_other" | "mwf" | "weekdays" | "weekly" | "custom";
-
-interface CronState {
-  type: ScheduleType;
-  hour: string;
-  minute: string;
-  weekday: string;
-  customCron: string;
-}
-
-const defaultCron: CronState = {
-  type: "daily",
-  hour: "8",
-  minute: "0",
-  weekday: "1",
-  customCron: "",
-};
-
-function buildCron(s: CronState): string {
-  const h = s.hour.padStart(1, "0");
-  const m = s.minute.padStart(2, "0");
-  switch (s.type) {
-    case "daily":       return `${m} ${h} * * *`;
-    case "every_other": return `${m} ${h} */2 * *`;
-    case "mwf":         return `${m} ${h} * * 1,3,5`;
-    case "weekdays":    return `${m} ${h} * * 1-5`;
-    case "weekly":      return `${m} ${h} * * ${s.weekday}`;
-    case "custom":      return s.customCron;
-  }
-}
-
-function humanCron(cron: string): string {
-  const p = cron.trim().split(/\s+/);
-  if (p.length !== 5) return cron;
-  const [m, h, dom, , dow] = p;
-  const pad = (n: string) => n.padStart(2, "0");
-  const hNum = parseInt(h);
-  const timeStr = isNaN(hNum) ? `${h}:${pad(m)}` : `${hNum % 12 || 12}:${pad(m)} ${hNum < 12 ? "AM" : "PM"}`;
-  if (dom === "*/2" && dow === "*") return `Every other day at ${timeStr}`;
-  if (dow === "1,3,5" && dom === "*") return `Mon/Wed/Fri at ${timeStr}`;
-  if (dow === "1-5" && dom === "*") return `Mon–Fri at ${timeStr}`;
-  if (dom === "*" && dow === "*") return `Daily at ${timeStr}`;
-  if (dom === "*" && !isNaN(parseInt(dow))) {
-    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return `Every ${days[parseInt(dow)]} at ${timeStr}`;
-  }
-  return cron;
-}
-
-const SCHEDULE_TYPES: { value: ScheduleType; label: string }[] = [
-  { value: "daily", label: "Daily" },
-  { value: "every_other", label: "Every other day" },
-  { value: "mwf", label: "Mon / Wed / Fri" },
-  { value: "weekdays", label: "Mon – Fri" },
-  { value: "weekly", label: "Weekly" },
-  { value: "custom", label: "Custom (raw cron)" },
-];
-
-const WEEKDAYS = [
-  { value: "0", label: "Sunday" },
-  { value: "1", label: "Monday" },
-  { value: "2", label: "Tuesday" },
-  { value: "3", label: "Wednesday" },
-  { value: "4", label: "Thursday" },
-  { value: "5", label: "Friday" },
-  { value: "6", label: "Saturday" },
-];
+const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
 const HOURS = Array.from({ length: 24 }, (_, i) => ({
-  value: String(i),
+  value: String(i).padStart(2, "0"),
   label: `${i % 12 || 12}:00 ${i < 12 ? "AM" : "PM"}`,
 }));
 
-function CronHelper({ value, onChange }: { value: CronState; onChange: (v: CronState) => void }) {
+function formatTime(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+function humanSchedule(p: ProtocolRead): string {
+  const times = p.schedule_times ?? [];
+  const timeStr = times.map(formatTime).join(", ") || "?";
+
+  if (p.schedule_type === "daily") {
+    const days = p.schedule_days ?? ALL_DAYS;
+    if (days.length === 7) return `Daily at ${timeStr}`;
+    return `${days.map((d) => DAY_LABELS[d]).join("/")} at ${timeStr}`;
+  }
+  if (p.schedule_type === "interval" || p.schedule_type === "weekly") {
+    const n = p.schedule_interval_value ?? 1;
+    const unit = p.schedule_interval_unit ?? "days";
+    if (unit === "hours") return `Every ${n}h`;
+    return `Every ${n} ${unit === "weeks" ? (n === 1 ? "week" : "weeks") : (n === 1 ? "day" : "days")} at ${timeStr}`;
+  }
+  return p.schedule_cron || "—";
+}
+
+// ---------------------------------------------------------------------------
+// Schedule form state
+// ---------------------------------------------------------------------------
+
+interface ScheduleState {
+  mode: "daily" | "interval";
+  hour: string;        // "08"
+  minute: string;      // "00"
+  days: number[];      // Mon=0..Sun=6; empty = all 7 days
+  intervalValue: string;
+  intervalUnit: "days" | "hours" | "weeks";
+}
+
+const defaultSchedule: ScheduleState = {
+  mode: "daily",
+  hour: "08",
+  minute: "00",
+  days: [],
+  intervalValue: "3",
+  intervalUnit: "days",
+};
+
+function scheduleToApiFields(s: ScheduleState) {
+  const timeStr = `${s.hour}:${s.minute}`;
+  if (s.mode === "daily") {
+    return {
+      schedule_type: "daily",
+      schedule_times: [timeStr],
+      schedule_days: s.days.length > 0 ? s.days : null,
+      schedule_interval_value: null,
+      schedule_interval_unit: null,
+    };
+  }
+  // interval
+  return {
+    schedule_type: "interval",
+    schedule_times: s.intervalUnit === "hours" ? [timeStr] : [timeStr],
+    schedule_days: null,
+    schedule_interval_value: parseInt(s.intervalValue) || 1,
+    schedule_interval_unit: s.intervalUnit,
+  };
+}
+
+function scheduleFromProtocol(p: ProtocolRead): ScheduleState {
+  const times = p.schedule_times ?? ["08:00"];
+  const [h, m] = (times[0] ?? "08:00").split(":");
+  const base = { hour: h ?? "08", minute: m ?? "00" };
+
+  if (p.schedule_type === "interval" || p.schedule_type === "weekly") {
+    return {
+      ...base,
+      mode: "interval",
+      days: [],
+      intervalValue: String(p.schedule_interval_value ?? 3),
+      intervalUnit: (p.schedule_interval_unit as ScheduleState["intervalUnit"]) ?? "days",
+    };
+  }
+  // daily (default)
+  return {
+    ...base,
+    mode: "daily",
+    days: p.schedule_days ?? [],
+    intervalValue: "3",
+    intervalUnit: "days",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// ScheduleHelper component
+// ---------------------------------------------------------------------------
+
+function ScheduleHelper({
+  value,
+  onChange,
+}: {
+  value: ScheduleState;
+  onChange: (v: ScheduleState) => void;
+}) {
   const inputCls =
-    "w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white";
+    "rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white";
+
+  const toggleDay = (d: number) => {
+    const next = value.days.includes(d)
+      ? value.days.filter((x) => x !== d)
+      : [...value.days, d].sort((a, b) => a - b);
+    onChange({ ...value, days: next });
+  };
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2">
-        {SCHEDULE_TYPES.map(({ value: v, label }) => (
+      {/* Mode toggle */}
+      <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+        {(["daily", "interval"] as const).map((m) => (
           <button
-            key={v}
+            key={m}
             type="button"
-            onClick={() => onChange({ ...value, type: v })}
-            className={`rounded-lg border py-2.5 text-sm font-medium transition-colors ${
-              value.type === v
-                ? "border-blue-600 bg-blue-600 text-white"
-                : "border-gray-300 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+            onClick={() => onChange({ ...value, mode: m })}
+            className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+              value.mode === m
+                ? "bg-blue-600 text-white"
+                : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
             }`}
           >
-            {label}
+            {m === "daily" ? "Daily / weekly" : "Every N days"}
           </button>
         ))}
       </div>
 
-      {value.type !== "custom" && (
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">Time</label>
-            <select
-              value={value.hour}
-              onChange={(e) => onChange({ ...value, hour: e.target.value })}
-              className={inputCls}
-            >
-              {HOURS.map(({ value: v, label }) => (
-                <option key={v} value={v}>{label}</option>
-              ))}
-            </select>
-          </div>
-          {value.type === "weekly" && (
-            <div className="flex-1">
-              <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">Day</label>
-              <select
-                value={value.weekday}
-                onChange={(e) => onChange({ ...value, weekday: e.target.value })}
-                className={inputCls}
-              >
-                {WEEKDAYS.map(({ value: v, label }) => (
-                  <option key={v} value={v}>{label}</option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-      )}
-
-      {value.type === "custom" && (
-        <div>
-          <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">
-            Cron expression{" "}
-            <span className="font-mono text-gray-400">minute hour dom month dow</span>
-          </label>
-          <input
-            type="text"
-            value={value.customCron}
-            onChange={(e) => onChange({ ...value, customCron: e.target.value })}
+      {/* Time picker */}
+      {value.intervalUnit !== "hours" && (
+        <div className="flex items-center gap-2">
+          <label className="shrink-0 text-sm text-gray-600 dark:text-gray-400">At</label>
+          <select
+            value={value.hour}
+            onChange={(e) => onChange({ ...value, hour: e.target.value })}
             className={inputCls}
-            placeholder="0 8 * * *"
-            spellCheck={false}
-          />
+          >
+            {HOURS.map(({ value: v, label }) => (
+              <option key={v} value={v}>{label}</option>
+            ))}
+          </select>
+          <select
+            value={value.minute}
+            onChange={(e) => onChange({ ...value, minute: e.target.value })}
+            className={inputCls}
+          >
+            {["00", "15", "30", "45"].map((m) => (
+              <option key={m} value={m}>:{m}</option>
+            ))}
+          </select>
         </div>
       )}
 
-      <p className="rounded-lg bg-gray-50 px-3 py-2 font-mono text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-        {buildCron(value) || "—"}
+      {/* Daily: day-of-week selector */}
+      {value.mode === "daily" && (
+        <div>
+          <p className="mb-1.5 text-xs text-gray-500 dark:text-gray-400">
+            Days (leave all unchecked for every day)
+          </p>
+          <div className="flex gap-1">
+            {DAY_LABELS.map((label, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => toggleDay(idx)}
+                className={`flex-1 rounded py-1.5 text-xs font-medium transition-colors ${
+                  value.days.length === 0 || value.days.includes(idx)
+                    ? value.days.includes(idx)
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                    : "bg-gray-50 text-gray-300 dark:bg-gray-900 dark:text-gray-600"
+                }`}
+              >
+                {label[0]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Interval: every N unit */}
+      {value.mode === "interval" && (
+        <div className="flex items-center gap-2">
+          <label className="shrink-0 text-sm text-gray-600 dark:text-gray-400">Every</label>
+          <input
+            type="number"
+            min="1"
+            value={value.intervalValue}
+            onChange={(e) => onChange({ ...value, intervalValue: e.target.value })}
+            className={`w-16 ${inputCls}`}
+          />
+          <select
+            value={value.intervalUnit}
+            onChange={(e) => onChange({ ...value, intervalUnit: e.target.value as ScheduleState["intervalUnit"] })}
+            className={inputCls}
+          >
+            <option value="hours">hours</option>
+            <option value="days">days</option>
+            <option value="weeks">weeks</option>
+          </select>
+        </div>
+      )}
+
+      {/* Preview */}
+      <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+        {value.mode === "daily"
+          ? `${value.days.length === 0 ? "Every day" : value.days.map((d) => DAY_LABELS[d]).join("/")} at ${value.hour}:${value.minute}`
+          : value.intervalUnit === "hours"
+          ? `Every ${value.intervalValue || "?"} hours`
+          : `Every ${value.intervalValue || "?"} ${value.intervalUnit} at ${value.hour}:${value.minute}`}
       </p>
     </div>
   );
@@ -177,7 +254,7 @@ interface FormState {
   dose_mode: "total" | "anchor";
   anchor_component_id: string;
   assignee_user_id: string;
-  cron: CronState;
+  schedule: ScheduleState;
   active: boolean;
   notes: string;
 }
@@ -188,23 +265,10 @@ const emptyForm = (selfId?: number): FormState => ({
   dose_mode: "total",
   anchor_component_id: "",
   assignee_user_id: selfId ? String(selfId) : "",
-  cron: { ...defaultCron },
+  schedule: { ...defaultSchedule },
   active: true,
   notes: "",
 });
-
-function cronStateFromString(cron: string): CronState {
-  const p = cron.trim().split(/\s+/);
-  if (p.length !== 5) return { ...defaultCron, type: "custom", customCron: cron };
-  const [m, h, dom, , dow] = p;
-  const base = { hour: String(parseInt(h) || 8), minute: m, weekday: "1", customCron: cron };
-  if (dom === "*/2" && dow === "*") return { ...base, type: "every_other" };
-  if (dow === "1,3,5" && dom === "*") return { ...base, type: "mwf" };
-  if (dow === "1-5" && dom === "*") return { ...base, type: "weekdays" };
-  if (dom === "*" && dow === "*") return { ...base, type: "daily" };
-  if (dom === "*" && !isNaN(parseInt(dow))) return { ...base, type: "weekly", weekday: dow };
-  return { ...base, type: "custom" };
-}
 
 function compoundById(compounds: CompoundRead[], id: string) {
   return compounds.find((c) => String(c.id) === id) ?? null;
@@ -259,11 +323,11 @@ export default function ProtocolsPage() {
     setEditing(p);
     setForm({
       compound_id: String(p.compound_id),
-      dose_mcg: String(p.dose_mcg),
+      dose_mcg: p.dose_mcg != null ? String(p.dose_mcg) : "",
       dose_mode: (p.dose_mode as "total" | "anchor") ?? "total",
       anchor_component_id: String(p.anchor_component_id ?? ""),
       assignee_user_id: String(p.assignee_user_id),
-      cron: cronStateFromString(p.schedule_cron),
+      schedule: scheduleFromProtocol(p),
       active: p.active,
       notes: p.notes ?? "",
     });
@@ -277,12 +341,12 @@ export default function ProtocolsPage() {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
-    const schedule_cron = buildCron(form.cron);
-    if (!schedule_cron.trim()) { setError("Invalid schedule"); setSubmitting(false); return; }
+
+    const scheduleFields = scheduleToApiFields(form.schedule);
     const body: Record<string, unknown> = {
       compound_id: parseInt(form.compound_id),
-      dose_mcg: parseInt(form.dose_mcg),
-      schedule_cron,
+      dose_mcg: form.dose_mcg ? parseInt(form.dose_mcg) : null,
+      ...scheduleFields,
       active: form.active,
       notes: form.notes || null,
       dose_mode: form.dose_mode,
@@ -404,9 +468,10 @@ export default function ProtocolsPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-semibold text-gray-900 dark:text-white">{p.compound_name}</p>
-                  <span className="text-sm text-gray-500 dark:text-gray-400">{p.dose_mcg} mcg</span>
+                  {p.dose_mcg != null && (
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{p.dose_mcg} mcg</span>
+                  )}
                 </div>
-                {/* Assignee badge */}
                 <div className="mt-1">
                   <UserAttributionChip
                     userId={p.assignee_user_id}
@@ -415,7 +480,7 @@ export default function ProtocolsPage() {
                   />
                 </div>
                 <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
-                  {humanCron(p.schedule_cron)}
+                  {humanSchedule(p)}
                 </p>
                 {p.active && p.next_fire_at && (
                   <p className={`mt-1 text-sm font-medium tabular-nums ${
@@ -498,7 +563,7 @@ export default function ProtocolsPage() {
 
               return (
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* Assignee — admin sees dropdown, member sees locked name */}
+                  {/* Assignee */}
                   {isAdmin ? (
                     <div>
                       <label className={labelCls}>Assigned to</label>
@@ -523,8 +588,9 @@ export default function ProtocolsPage() {
                     </div>
                   )}
 
+                  {/* Medication */}
                   <div>
-                    <label className={labelCls}>Compound</label>
+                    <label className={labelCls}>Medication</label>
                     <select
                       data-testid="compound-select"
                       value={form.compound_id}
@@ -545,7 +611,7 @@ export default function ProtocolsPage() {
                       required
                       className={inputCls}
                     >
-                      <option value="">Select compound…</option>
+                      <option value="">Select medication…</option>
                       {compounds.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}{c.is_blend ? " (blend)" : ""}
@@ -554,6 +620,7 @@ export default function ProtocolsPage() {
                     </select>
                   </div>
 
+                  {/* Blend mode */}
                   {isBlend && (
                     <div>
                       <label className={labelCls}>Dose mode</label>
@@ -596,6 +663,7 @@ export default function ProtocolsPage() {
                     </div>
                   )}
 
+                  {/* Dose */}
                   <div>
                     <label className={labelCls}>
                       {isBlend && form.dose_mode === "anchor" && selectedAnchorBc
@@ -603,13 +671,14 @@ export default function ProtocolsPage() {
                         : isBlend
                         ? "Total blend dose (mcg)"
                         : "Dose (mcg)"}
+                      {" "}
+                      <span className="font-normal text-gray-400">(optional)</span>
                     </label>
                     <input
                       type="number"
                       min="1"
                       value={form.dose_mcg}
                       onChange={(e) => setForm({ ...form, dose_mcg: e.target.value })}
-                      required
                       className={inputCls}
                       placeholder="e.g. 500"
                     />
@@ -632,14 +701,16 @@ export default function ProtocolsPage() {
                     </div>
                   )}
 
+                  {/* Schedule */}
                   <div>
                     <label className={labelCls}>Schedule</label>
-                    <CronHelper
-                      value={form.cron}
-                      onChange={(cron) => setForm({ ...form, cron })}
+                    <ScheduleHelper
+                      value={form.schedule}
+                      onChange={(schedule) => setForm({ ...form, schedule })}
                     />
                   </div>
 
+                  {/* Notes */}
                   <div>
                     <label className={labelCls}>Notes <span className="font-normal text-gray-400">(optional)</span></label>
                     <textarea

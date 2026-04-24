@@ -20,10 +20,21 @@ export interface ComponentSnapshot {
   linked_compound_id: number | null;
 }
 
+export const MEDICATION_TYPES = [
+  "injection", "tablet", "capsule", "liquid", "topical", "sublingual", "inhaled", "other",
+] as const;
+export type MedicationType = typeof MEDICATION_TYPES[number];
+
 export interface CompoundRead {
   id: number;
   created_by_user_id: number;
   name: string;
+  medication_type: MedicationType;
+  dose_unit: string;
+  strength_amount: number | null;
+  strength_unit: string | null;
+  route: string | null;
+  form_notes: string | null;
   concentration_mg_per_ml: number | null;
   vial_size_mg: number | null;
   bac_water_ml: number | null;
@@ -49,14 +60,17 @@ export interface InjectionRead {
   logged_by_user_id: number;
   injected_by_user_id: number;
   compound_id: number;
-  dose_mcg: number;
-  injection_site: string;
+  dose_mcg: number | null;
+  injection_site: string | null;
   injected_at: string;
   notes: string | null;
   created_at: string;
   draw_volume_ml: number | null;
   dose_mode: string;
   component_snapshot: ComponentSnapshot[] | null;
+  quantity: number | null;
+  status: string;
+  skip_reason: string | null;
   logger_name: string;
   injector_name: string;
 }
@@ -118,8 +132,14 @@ export interface ProtocolRead {
   created_by_user_id: number;
   compound_id: number;
   compound_name: string;
-  dose_mcg: number;
+  dose_mcg: number | null;
   schedule_cron: string;
+  schedule_type: string;
+  schedule_times: string[] | null;
+  schedule_days: number[] | null;
+  schedule_interval_value: number | null;
+  schedule_interval_unit: string | null;
+  schedule_start_date: string | null;
   active: boolean;
   notes: string | null;
   created_at: string;
@@ -163,9 +183,11 @@ export interface UserDoseSummary {
 export interface NextDoseItem {
   protocol_id: number;
   compound_name: string;
-  dose_mcg: number;
+  dose_mcg: number | null;
   next_fire_at: string;
   schedule_cron: string;
+  schedule_type: string;
+  schedule_times: string[] | null;
   assignee_user_id: number;
   assignee_name: string;
 }

@@ -5,8 +5,29 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Archive, ArchiveRestore, Calculator, ExternalLink, Pencil, Plus, Trash2 } from "@/components/icons";
 import { apiFetch } from "@/lib/api";
-import { BlendComponent, CompoundRead } from "@/lib/types";
+import { BlendComponent, CompoundRead, MEDICATION_TYPES, MedicationType } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
+
+const MEDICATION_TYPE_LABELS: Record<MedicationType, string> = {
+  injection: "Injection",
+  tablet: "Tablet",
+  capsule: "Capsule",
+  liquid: "Liquid",
+  topical: "Topical",
+  sublingual: "Sublingual",
+  inhaled: "Inhaled",
+  other: "Other",
+};
+
+const STRENGTH_UNITS: Record<string, string[]> = {
+  tablet:    ["mcg", "mg"],
+  capsule:   ["mcg", "mg"],
+  liquid:    ["mg/ml", "mcg/ml"],
+  topical:   ["mg/ml", "mg/g", "%"],
+  sublingual: ["mcg", "mg"],
+  inhaled:   ["mcg", "mg"],
+  other:     ["mcg", "mg", "mg/ml"],
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -15,7 +36,12 @@ import { useAuth } from "@/context/AuthContext";
 interface FormState {
   name: string;
   aliases: string;
-  // Reconstitution
+  medication_type: MedicationType;
+  // Strength (non-injection)
+  strength_amount: string;
+  strength_unit: string;
+  dose_unit: string;
+  // Reconstitution (injection)
   concentration_mg_per_ml: string;
   vial_size_mg: string;
   bac_water_ml: string;
@@ -35,6 +61,10 @@ interface FormState {
 const emptyForm: FormState = {
   name: "",
   aliases: "",
+  medication_type: "injection",
+  strength_amount: "",
+  strength_unit: "",
+  dose_unit: "mcg",
   concentration_mg_per_ml: "",
   vial_size_mg: "",
   bac_water_ml: "",
@@ -60,6 +90,10 @@ function compoundToForm(c: CompoundRead): FormState {
   return {
     name: c.name,
     aliases: c.aliases ?? "",
+    medication_type: (c.medication_type as MedicationType) ?? "injection",
+    strength_amount: c.strength_amount?.toString() ?? "",
+    strength_unit: c.strength_unit ?? "",
+    dose_unit: c.dose_unit ?? "mcg",
     concentration_mg_per_ml: c.concentration_mg_per_ml?.toString() ?? "",
     vial_size_mg: c.vial_size_mg?.toString() ?? "",
     bac_water_ml: c.bac_water_ml?.toString() ?? "",
@@ -196,8 +230,11 @@ export default function CompoundsPage() {
     setSubmitting(true);
     setError(null);
 
+    const isInjection = form.medication_type === "injection";
+
     const body: Record<string, unknown> = {
       name: form.name,
+      medication_type: form.medication_type,
       aliases: form.aliases || null,
       notes: form.notes || null,
       is_blend: form.is_blend,
@@ -207,7 +244,13 @@ export default function CompoundsPage() {
       typical_dose_mcg_max: toMcg(form.typical_dose_mcg_max, form.dose_range_unit),
     };
 
-    if (form.is_blend) {
+    if (!isInjection) {
+      body.dose_unit = form.dose_unit || "other";
+      body.strength_amount = form.strength_amount ? parseFloat(form.strength_amount) : null;
+      body.strength_unit = form.strength_unit || null;
+    }
+
+    if (isInjection && form.is_blend) {
       body.bac_water_ml = form.bac_water_ml ? parseFloat(form.bac_water_ml) : null;
       body.blend_components = form.blend_components.map((bc, i) => ({
         name: bc.name,
@@ -216,7 +259,7 @@ export default function CompoundsPage() {
         position: i,
         linked_compound_id: bc.linked_compound_id,
       }));
-    } else {
+    } else if (isInjection) {
       body.concentration_mg_per_ml = form.concentration_mg_per_ml
         ? parseFloat(form.concentration_mg_per_ml) : null;
       body.vial_size_mg = form.vial_size_mg ? parseFloat(form.vial_size_mg) : null;
@@ -319,6 +362,11 @@ export default function CompoundsPage() {
                       blend
                     </span>
                   )}
+                  {c.medication_type && c.medication_type !== "injection" && (
+                    <span className="rounded px-1.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                      {MEDICATION_TYPE_LABELS[c.medication_type as MedicationType] ?? c.medication_type}
+                    </span>
+                  )}
                   {c.aliases && (
                     <span className="text-xs text-gray-400 dark:text-gray-500">
                       {c.aliases}
@@ -329,6 +377,11 @@ export default function CompoundsPage() {
                   <p className="mt-0.5 text-sm text-blue-600">
                     {c.blend_components.map((bc) => `${bc.name} ${bc.amount_mg}mg`).join(" · ")}
                     {c.bac_water_ml ? ` · ${c.bac_water_ml}mL BAC` : ""}
+                  </p>
+                ) : c.medication_type !== "injection" && c.strength_amount ? (
+                  <p className="mt-0.5 text-sm text-blue-600">
+                    {c.strength_amount} {c.strength_unit}
+                    {c.dose_unit && c.dose_unit !== c.strength_unit ? ` · per ${c.dose_unit}` : ""}
                   </p>
                 ) : (
                   c.concentration_mg_per_ml && (
@@ -437,7 +490,81 @@ export default function CompoundsPage() {
                 </div>
               </section>
 
-              {/* ── Reconstitution ── */}
+              {/* ── Medication Type ── */}
+              <section className="space-y-3">
+                <SectionHeading>Medication Type</SectionHeading>
+                <select
+                  value={form.medication_type}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      medication_type: e.target.value as MedicationType,
+                      // reset type-specific fields when switching
+                      strength_amount: "",
+                      strength_unit: "",
+                      concentration_mg_per_ml: "",
+                      vial_size_mg: "",
+                      bac_water_ml: "",
+                    })
+                  }
+                  className={inputCls}
+                >
+                  {MEDICATION_TYPES.map((t) => (
+                    <option key={t} value={t}>{MEDICATION_TYPE_LABELS[t]}</option>
+                  ))}
+                </select>
+              </section>
+
+              {/* ── Strength (non-injection) ── */}
+              {form.medication_type !== "injection" && (
+                <section className="space-y-3">
+                  <SectionHeading>Strength per unit</SectionHeading>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelCls}>Amount</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={form.strength_amount}
+                        onChange={(e) => setForm({ ...form, strength_amount: e.target.value })}
+                        className={inputCls}
+                        placeholder="e.g. 500"
+                        required={["tablet","capsule","liquid"].includes(form.medication_type)}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Unit</label>
+                      <select
+                        value={form.strength_unit}
+                        onChange={(e) => setForm({ ...form, strength_unit: e.target.value })}
+                        className={inputCls}
+                        required={["tablet","capsule","liquid"].includes(form.medication_type)}
+                      >
+                        <option value="">Select unit…</option>
+                        {(STRENGTH_UNITS[form.medication_type] ?? ["mcg","mg"]).map((u) => (
+                          <option key={u} value={u}>{u}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Dose unit (what you enter when logging)</label>
+                    <select
+                      value={form.dose_unit}
+                      onChange={(e) => setForm({ ...form, dose_unit: e.target.value })}
+                      className={inputCls}
+                    >
+                      {["tablet","capsule","ml","drop","puff","patch","mcg","mg","other"].map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                  </div>
+                </section>
+              )}
+
+              {/* ── Reconstitution (injection only) ── */}
+              {form.medication_type === "injection" && (
               <section className="space-y-3">
                 <SectionHeading>Reconstitution</SectionHeading>
 
@@ -533,6 +660,7 @@ export default function CompoundsPage() {
                   </div>
                 )}
               </section>
+              )}
 
               {/* ── Reference ── */}
               <section className="space-y-3">
