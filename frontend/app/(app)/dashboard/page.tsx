@@ -17,6 +17,7 @@ import {
 import LogInjectionForm from "@/components/LogInjectionForm";
 import UserAttributionChip, { userColor } from "@/components/UserAttributionChip";
 import { Plus } from "@/components/icons";
+import { formatDose } from "@/lib/formatDose";
 
 function LogOutIcon() {
   return (
@@ -90,6 +91,8 @@ export default function DashboardPage() {
 
   void tick;
 
+  const compoundsById = Object.fromEntries(compounds.map((c) => [c.id, c]));
+
   const activeWeekSummary = data
     ? weekScope === "household"
       ? data.week_summary
@@ -122,7 +125,9 @@ export default function DashboardPage() {
               <Card key={item.protocol_id} className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-semibold text-gray-900 truncate dark:text-white">{item.compound_name}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{item.dose_mcg} mcg</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {formatDose(compoundsById[item.compound_id], { dose_mcg: item.dose_mcg })}
+                  </p>
                   <div className="mt-0.5">
                     <UserAttributionChip userId={item.assignee_user_id} userName={item.assignee_name} size="sm" />
                   </div>
@@ -233,7 +238,11 @@ export default function DashboardPage() {
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-900 truncate dark:text-white">{item.compound_name}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {item.dose_mcg} mcg · {siteLabel(item.injection_site)}
+                      {formatDose(compoundsById[item.compound_id], {
+                        dose_mcg: item.dose_mcg,
+                        quantity: item.quantity,
+                      })}
+                      {item.injection_site && ` · ${siteLabel(item.injection_site)}`}
                     </p>
                     <div className="mt-0.5">
                       <UserAttributionChip userId={item.injected_by_user_id} userName={item.injector_name} size="sm" />
@@ -272,7 +281,7 @@ export default function DashboardPage() {
                         size="sm"
                       />
                       <span className="text-sm text-gray-600 dark:text-gray-400">
-                        injected {inj.dose_mcg} mcg {compound?.name ?? `#${inj.compound_id}`}
+                        injected {formatDose(compound, inj)} {compound?.name ?? `#${inj.compound_id}`}
                         {compound?.is_blend ? ` via ${compound.name}` : ""}
                       </span>
                     </div>

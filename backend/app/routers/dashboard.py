@@ -110,6 +110,7 @@ def get_dashboard(
         next_doses.append(
             NextDoseItem(
                 protocol_id=protocol.id,
+                compound_id=protocol.compound_id,
                 compound_name=compound.name if compound else f"Compound #{protocol.compound_id}",
                 dose_mcg=protocol.dose_mcg,
                 next_fire_at=next_fire,
@@ -148,6 +149,7 @@ def get_dashboard(
                     compound_id=compound.id,
                     compound_name=compound.name,
                     dose_mcg=last_inj.dose_mcg,
+                    quantity=last_inj.quantity,
                     injection_site=last_inj.injection_site,
                     injected_at=last_inj.injected_at,
                     injected_by_user_id=last_inj.injected_by_user_id,

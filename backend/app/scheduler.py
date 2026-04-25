@@ -56,8 +56,21 @@ def _build_message(protocol: Protocol, compound: Compound, assignee_name: str) -
     prefix = f"{assignee_name}, "
     compound_name = compound.name
 
+    if compound.medication_type != "injection":
+        if protocol.dose_mcg and compound.strength_amount and compound.strength_unit:
+            su = compound.strength_unit.lower()
+            sa = float(compound.strength_amount)
+            unit_mcg = sa * 1000 if "mg" in su else (sa if "mcg" in su else None)
+            if unit_mcg:
+                qty = protocol.dose_mcg / unit_mcg
+                du = compound.dose_unit or "dose"
+                qty_str = str(int(qty)) if qty == int(qty) else f"{qty:.1f}"
+                return f"{prefix}time for {qty_str} {du} of {compound_name} ({sa:g} {compound.strength_unit})"
+        return f"{prefix}time for {compound_name}"
+
     if not compound.is_blend:
-        return f"{prefix}time for {protocol.dose_mcg} mcg {compound_name}"
+        dose_str = f"{protocol.dose_mcg:,}" if protocol.dose_mcg else "?"
+        return f"{prefix}time for {dose_str} mcg {compound_name}"
 
     total_mg = sum(float(bc.amount_mg) for bc in compound.blend_components)
     draw = _blend_draw_ml(protocol, compound)

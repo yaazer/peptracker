@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Trash2 } from "@/components/icons";
 import { apiFetch } from "@/lib/api";
 import { CompoundRead, HouseholdUser, InjectionRead, formatDatetime, siteLabel } from "@/lib/types";
+import { formatDose } from "@/lib/formatDose";
 import UserAttributionChip from "@/components/UserAttributionChip";
 import { useAuth } from "@/context/AuthContext";
 
@@ -224,11 +225,7 @@ export default function HistoryPage() {
                       </span>
                     </div>
                     <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
-                      {inj.dose_mcg != null
-                        ? `${inj.dose_mcg} mcg`
-                        : inj.quantity != null
-                        ? `${inj.quantity} units`
-                        : "—"}
+                      {formatDose(compoundMap[inj.compound_id], inj)}
                       {inj.dose_mode === "anchor" && " (anchor)"}
                       {inj.injection_site && ` · ${siteLabel(inj.injection_site)}`}
                       {inj.status === "skipped" && (

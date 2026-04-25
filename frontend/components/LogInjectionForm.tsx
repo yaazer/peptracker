@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { CompoundRead, HouseholdUser, INJECTION_SITES } from "@/lib/types";
+import { quantityFieldLabel, quantityHint } from "@/lib/formatDose";
 import { useAuth } from "@/context/AuthContext";
 
 function localDatetimeNow(): string {
@@ -64,17 +65,6 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
     (minDose != null || maxDose != null) &&
     (doseNum < (minDose ?? -Infinity) || doseNum > (maxDose ?? Infinity));
 
-  // Estimated dose for pill/liquid, shown as info text
-  const estimatedDoseMcg = (() => {
-    if (isInjection || !selectedCompound || !quantity) return null;
-    const qty = parseFloat(quantity);
-    if (!qty || !selectedCompound.strength_amount || !selectedCompound.strength_unit) return null;
-    const unit = selectedCompound.strength_unit.toLowerCase().trim();
-    if (unit === "mcg") return Math.round(selectedCompound.strength_amount * qty);
-    if (unit === "mg") return Math.round(selectedCompound.strength_amount * qty * 1000);
-    if (unit === "mg/ml") return Math.round(selectedCompound.strength_amount * qty * 1000);
-    return null;
-  })();
 
   const isLoggingForOther =
     currentUser && injectedById && String(currentUser.id) !== injectedById;
@@ -311,10 +301,7 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
       {/* ---- Non-injection (pill / liquid / etc.) fields ---- */}
       {!isInjection && selectedCompound && (
         <div>
-          <label className={labelCls}>
-            Quantity
-            {selectedCompound.dose_unit ? ` (${selectedCompound.dose_unit})` : ""}
-          </label>
+          <label className={labelCls}>{quantityFieldLabel(selectedCompound)}</label>
           <input
             type="number"
             min="0.1"
@@ -325,9 +312,9 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
             className={inputCls}
             placeholder="e.g. 1"
           />
-          {estimatedDoseMcg !== null && (
+          {quantityHint(selectedCompound, quantity) !== null && (
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              ≈ {estimatedDoseMcg.toLocaleString()} mcg
+              {quantityHint(selectedCompound, quantity)}
             </p>
           )}
         </div>

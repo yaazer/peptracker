@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Archive, ArchiveRestore, Calculator, ExternalLink, Pencil, Plus, Trash2 } from "@/components/icons";
 import { apiFetch } from "@/lib/api";
-import { BlendComponent, CompoundRead, MEDICATION_TYPES, MedicationType } from "@/lib/types";
+import { BlendComponent, CompoundRead, MEDICATION_TYPES, MedicationType, ReferenceResult } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
+import MedicationSearchInput from "@/components/MedicationSearchInput";
 
 const MEDICATION_TYPE_LABELS: Record<MedicationType, string> = {
   injection: "Injection",
@@ -135,6 +136,7 @@ export default function CompoundsPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [prefillSource, setPrefillSource] = useState<"rxnorm" | "local" | null>(null);
 
   const load = async (archived = showArchived) => {
     const res = await apiFetch(`/api/compounds?include_archived=${archived}`);
@@ -175,7 +177,7 @@ export default function CompoundsPage() {
     setModalOpen(true);
   };
 
-  const closeModal = () => { setModalOpen(false); setEditing(null); };
+  const closeModal = () => { setModalOpen(false); setEditing(null); setPrefillSource(null); };
 
   // Blend component helpers
   const updateComponent = (idx: number, patch: Partial<BlendComponent>) => {
@@ -213,6 +215,17 @@ export default function CompoundsPage() {
         .filter((_, i) => i !== idx)
         .map((bc, i) => ({ ...bc, position: i })),
     }));
+  };
+
+  const handleReferenceSelect = (result: ReferenceResult) => {
+    setForm((f) => ({
+      ...f,
+      name: result.name,
+      strength_amount: result.strength_amount != null ? String(result.strength_amount) : f.strength_amount,
+      strength_unit: result.strength_unit ?? f.strength_unit,
+      route: result.route ?? f.route,
+    }));
+    setPrefillSource(result.source);
   };
 
   const toMcg = (val: string, unit: "mcg" | "mg") => {
@@ -462,19 +475,84 @@ export default function CompoundsPage() {
 
             <form onSubmit={handleSubmit} className="space-y-6">
 
+              {/* ── Medication Type (first — scopes the name search) ── */}
+              <section className="space-y-3">
+                <SectionHeading>Medication Type</SectionHeading>
+                <select
+                  value={form.medication_type}
+                  onChange={(e) => {
+                    const newType = e.target.value as MedicationType;
+                    const defaultDoseUnit: Partial<Record<MedicationType, string>> = {
+                      tablet: "tablet", capsule: "capsule", liquid: "ml",
+                    };
+                    setForm({
+                      ...form,
+                      medication_type: newType,
+                      name: prefillSource ? "" : form.name,
+                      dose_unit: defaultDoseUnit[newType] ?? "mcg",
+                      strength_amount: "",
+                      strength_unit: "",
+                      concentration_mg_per_ml: "",
+                      vial_size_mg: "",
+                      bac_water_ml: "",
+                    });
+                    setPrefillSource(null);
+                  }}
+                  className={inputCls}
+                >
+                  {MEDICATION_TYPES.map((t) => (
+                    <option key={t} value={t}>{MEDICATION_TYPE_LABELS[t]}</option>
+                  ))}
+                </select>
+              </section>
+
               {/* ── Basic Info ── */}
               <section className="space-y-3">
                 <SectionHeading>Basic Info</SectionHeading>
+
+                {/* Pre-fill banner (create mode only) */}
+                {prefillSource && !editing && (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+                    <span>
+                      Pre-filled from{" "}
+                      <strong>{prefillSource === "rxnorm" ? "RxNorm" : "local"} reference</strong>.
+                      All fields are editable.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPrefillSource(null)}
+                      className="shrink-0 text-lg leading-none text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-300"
+                      aria-label="Dismiss"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
                 <div>
                   <label className={labelCls}>Name <span className="text-red-500">*</span></label>
-                  <input
-                    type="text"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    required
-                    className={inputCls}
-                    placeholder="e.g. BPC-157"
-                  />
+                  {editing ? (
+                    <input
+                      type="text"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      required
+                      className={inputCls}
+                      placeholder="e.g. BPC-157"
+                    />
+                  ) : (
+                    <MedicationSearchInput
+                      value={form.name}
+                      onChange={(v) => {
+                        setForm((f) => ({ ...f, name: v }));
+                        if (prefillSource) setPrefillSource(null);
+                      }}
+                      onSelect={handleReferenceSelect}
+                      medicationType={form.medication_type}
+                      placeholder="Search or enter a medication name…"
+                      inputClassName={inputCls}
+                    />
+                  )}
                 </div>
                 <div>
                   <label className={labelCls}>
@@ -483,36 +561,11 @@ export default function CompoundsPage() {
                   <input
                     type="text"
                     value={form.aliases}
-                    onChange={(e) => setForm({ ...form, aliases: e.target.value })}
+                    onChange={(e) => { setForm({ ...form, aliases: e.target.value }); setPrefillSource(null); }}
                     className={inputCls}
                     placeholder="e.g. BPC157, Body Protection Compound"
                   />
                 </div>
-              </section>
-
-              {/* ── Medication Type ── */}
-              <section className="space-y-3">
-                <SectionHeading>Medication Type</SectionHeading>
-                <select
-                  value={form.medication_type}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      medication_type: e.target.value as MedicationType,
-                      // reset type-specific fields when switching
-                      strength_amount: "",
-                      strength_unit: "",
-                      concentration_mg_per_ml: "",
-                      vial_size_mg: "",
-                      bac_water_ml: "",
-                    })
-                  }
-                  className={inputCls}
-                >
-                  {MEDICATION_TYPES.map((t) => (
-                    <option key={t} value={t}>{MEDICATION_TYPE_LABELS[t]}</option>
-                  ))}
-                </select>
               </section>
 
               {/* ── Strength (non-injection) ── */}

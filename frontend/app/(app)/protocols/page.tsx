@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, Pencil, Plus, Trash2 } from "@/components/icons";
 import { apiFetch } from "@/lib/api";
 import { CompoundRead, HouseholdUser, ProtocolRead, timeUntil } from "@/lib/types";
+import { formatDose } from "@/lib/formatDose";
 import { calculateBlend, type BlendComponentInput } from "@/lib/reconstitution";
 import BlendResultCard from "@/components/BlendResultCard";
 import UserAttributionChip from "@/components/UserAttributionChip";
@@ -303,6 +304,8 @@ export default function ProtocolsPage() {
 
   useEffect(() => { load(); }, [includeInactive]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const compoundsById = Object.fromEntries(compounds.map((c) => [c.id, c]));
+
   const visibleProtocols = protocols.filter((p) => {
     if (filterMode === "mine") return p.assignee_user_id === currentUser?.id;
     if (filterMode === "person" && filterPersonId) return String(p.assignee_user_id) === filterPersonId;
@@ -469,7 +472,9 @@ export default function ProtocolsPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-semibold text-gray-900 dark:text-white">{p.compound_name}</p>
                   {p.dose_mcg != null && (
-                    <span className="text-sm text-gray-500 dark:text-gray-400">{p.dose_mcg} mcg</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                      {formatDose(compoundsById[p.compound_id], { dose_mcg: p.dose_mcg })}
+                    </span>
                   )}
                 </div>
                 <div className="mt-1">

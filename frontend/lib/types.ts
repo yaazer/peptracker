@@ -182,6 +182,7 @@ export interface UserDoseSummary {
 
 export interface NextDoseItem {
   protocol_id: number;
+  compound_id: number;
   compound_name: string;
   dose_mcg: number | null;
   next_fire_at: string;
@@ -195,8 +196,9 @@ export interface NextDoseItem {
 export interface LastByCompoundItem {
   compound_id: number;
   compound_name: string;
-  dose_mcg: number;
-  injection_site: string;
+  dose_mcg: number | null;
+  quantity: number | null;
+  injection_site: string | null;
   injected_at: string;
   injected_by_user_id: number;
   injector_name: string;
@@ -233,4 +235,17 @@ export interface DashboardData {
   my_week_summary: WeekSummary;
   recent: InjectionRead[];
   timeline: TimelinePoint[];
+}
+
+export interface ReferenceResult {
+  source: "rxnorm" | "local";
+  rxcui: string | null;
+  name: string;
+  display_name: string;
+  medication_type: string;
+  strength_amount: number | null;
+  strength_unit: string | null;
+  dose_unit: string;
+  route: string;
+  aliases: string[];
 }

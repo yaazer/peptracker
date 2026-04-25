@@ -402,6 +402,7 @@ class ReminderLogRead(BaseModel):
 
 class NextDoseItem(BaseModel):
     protocol_id: int
+    compound_id: int
     compound_name: str
     dose_mcg: int | None
     next_fire_at: datetime
@@ -416,6 +417,7 @@ class LastByCompoundItem(BaseModel):
     compound_id: int
     compound_name: str
     dose_mcg: int | None
+    quantity: float | None
     injection_site: InjectionSite | None
     injected_at: datetime
     injected_by_user_id: int
@@ -460,3 +462,20 @@ class DashboardResponse(BaseModel):
     my_week_summary: WeekSummary
     recent: list[InjectionRead]
     timeline: list[TimelinePoint]
+
+
+# ---------------------------------------------------------------------------
+# Reference
+# ---------------------------------------------------------------------------
+
+class ReferenceResult(BaseModel):
+    source: str  # "rxnorm" | "local"
+    rxcui: str | None
+    name: str
+    display_name: str
+    medication_type: str
+    strength_amount: float | None
+    strength_unit: str | None
+    dose_unit: str
+    route: str
+    aliases: list[str]

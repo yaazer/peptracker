@@ -1,0 +1,234 @@
+[
+  {
+    "name": "BPC-157",
+    "aliases": ["Body Protection Compound 157", "PL 14736"],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 200,
+    "typical_dose_mcg_max": 500,
+    "notes": "Synthetic pentadecapeptide. Common for gut health and tissue repair."
+  },
+  {
+    "name": "TB-500",
+    "aliases": ["Thymosin Beta-4", "Tβ4"],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 2000,
+    "typical_dose_mcg_max": 5000,
+    "notes": "Synthetic version of Thymosin Beta-4. Recovery and healing."
+  },
+  {
+    "name": "GHK-Cu",
+    "aliases": ["Copper Peptide", "GHK-Copper", "Glycyl-L-histidyl-L-lysine copper"],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 500,
+    "typical_dose_mcg_max": 2000
+  },
+  {
+    "name": "Retatrutide",
+    "aliases": ["RETA", "LY3437943"],
+    "medication_type": "injection",
+    "dose_unit": "mg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 2000,
+    "typical_dose_mcg_max": 12000,
+    "notes": "Triple GIP/GLP-1/glucagon receptor agonist."
+  },
+  {
+    "name": "Semaglutide",
+    "aliases": ["Ozempic", "Wegovy", "Rybelsus"],
+    "medication_type": "injection",
+    "dose_unit": "mg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 250,
+    "typical_dose_mcg_max": 2400,
+    "notes": "GLP-1 receptor agonist. Weekly dosing typical."
+  },
+  {
+    "name": "Tirzepatide",
+    "aliases": ["Mounjaro", "Zepbound"],
+    "medication_type": "injection",
+    "dose_unit": "mg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 2500,
+    "typical_dose_mcg_max": 15000,
+    "notes": "Dual GIP/GLP-1 receptor agonist. Weekly dosing typical."
+  },
+  {
+    "name": "MOTS-C",
+    "aliases": [],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 5000,
+    "typical_dose_mcg_max": 10000,
+    "notes": "Mitochondrial-derived peptide. Metabolic effects."
+  },
+  {
+    "name": "CJC-1295",
+    "aliases": ["CJC1295", "Modified GRF 1-29"],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 100,
+    "typical_dose_mcg_max": 1000
+  },
+  {
+    "name": "Ipamorelin",
+    "aliases": [],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 100,
+    "typical_dose_mcg_max": 300,
+    "notes": "GHRP. Often combined with CJC-1295."
+  },
+  {
+    "name": "Hexarelin",
+    "aliases": ["Examorelin"],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 100,
+    "typical_dose_mcg_max": 200
+  },
+  {
+    "name": "Epithalon",
+    "aliases": ["Epitalon", "Epithalamin"],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 5000,
+    "typical_dose_mcg_max": 20000
+  },
+  {
+    "name": "Selank",
+    "aliases": [],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "intranasal",
+    "typical_dose_mcg_min": 250,
+    "typical_dose_mcg_max": 900
+  },
+  {
+    "name": "Semax",
+    "aliases": [],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "intranasal",
+    "typical_dose_mcg_min": 200,
+    "typical_dose_mcg_max": 900
+  },
+  {
+    "name": "PT-141",
+    "aliases": ["Bremelanotide"],
+    "medication_type": "injection",
+    "dose_unit": "mg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 500,
+    "typical_dose_mcg_max": 2000
+  },
+  {
+    "name": "AOD-9604",
+    "aliases": ["Advanced Obesity Drug 9604"],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 250,
+    "typical_dose_mcg_max": 500
+  },
+  {
+    "name": "NAD+",
+    "aliases": ["NAD", "Nicotinamide Adenine Dinucleotide"],
+    "medication_type": "injection",
+    "dose_unit": "mg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 50000,
+    "typical_dose_mcg_max": 500000
+  },
+  {
+    "name": "Thymosin Alpha-1",
+    "aliases": ["TA-1", "Zadaxin"],
+    "medication_type": "injection",
+    "dose_unit": "mg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 900,
+    "typical_dose_mcg_max": 1600
+  },
+  {
+    "name": "KPV",
+    "aliases": [],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 200,
+    "typical_dose_mcg_max": 800
+  },
+  {
+    "name": "LL-37",
+    "aliases": ["Cathelicidin"],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 100,
+    "typical_dose_mcg_max": 400
+  },
+  {
+    "name": "Melanotan II",
+    "aliases": ["MT-2", "MTII"],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 250,
+    "typical_dose_mcg_max": 1000
+  },
+  {
+    "name": "DSIP",
+    "aliases": ["Delta Sleep-Inducing Peptide"],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 100,
+    "typical_dose_mcg_max": 500
+  },
+  {
+    "name": "Dihexa",
+    "aliases": ["PNB-0408"],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 100,
+    "typical_dose_mcg_max": 300,
+    "notes": "Cognitive enhancement peptide."
+  },
+  {
+    "name": "Cerebrolysin",
+    "aliases": [],
+    "medication_type": "injection",
+    "dose_unit": "ml",
+    "route": "intramuscular",
+    "notes": "Neuropeptide mixture. Cognitive and neuroprotective effects."
+  },
+  {
+    "name": "Fox04-DRI",
+    "aliases": ["FOXO4-DRI"],
+    "medication_type": "injection",
+    "dose_unit": "mcg",
+    "route": "subcutaneous",
+    "typical_dose_mcg_min": 1000,
+    "typical_dose_mcg_max": 5000,
+    "notes": "Senolytic peptide."
+  },
+  {
+    "name": "5-Amino-1MQ",
+    "aliases": ["5-Amino-1-methylquinolinium"],
+    "medication_type": "injection",
+    "dose_unit": "mg",
+    "route": "subcutaneous",
+    "notes": "NNMT inhibitor."
+  }
+]
