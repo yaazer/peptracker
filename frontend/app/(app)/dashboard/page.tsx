@@ -66,6 +66,7 @@ export default function DashboardPage() {
   const [compounds, setCompounds] = useState<CompoundRead[]>([]);
   const [householdUsers, setHouseholdUsers] = useState<HouseholdUser[]>([]);
   const [fabOpen, setFabOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{ compoundId?: string; isSkip?: boolean }>({});
   const [tick, setTick] = useState(0);
   // Admins default to Household view; members default to Mine
   const [weekScope, setWeekScope] = useState<"household" | "mine">(
@@ -132,17 +133,29 @@ export default function DashboardPage() {
                     <UserAttributionChip userId={item.assignee_user_id} userName={item.assignee_name} size="sm" />
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
+                <div className="flex shrink-0 items-center gap-2">
                   <span className={`text-sm font-medium tabular-nums ${
                     new Date(item.next_fire_at) <= new Date() ? "text-red-500" : "text-blue-600"
                   }`}>
                     {timeUntil(item.next_fire_at)}
                   </span>
                   <button
-                    onClick={() => setFabOpen(true)}
+                    onClick={() => {
+                      setModalConfig({ compoundId: String(item.compound_id) });
+                      setFabOpen(true);
+                    }}
                     className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white"
                   >
                     Log
+                  </button>
+                  <button
+                    onClick={() => {
+                      setModalConfig({ compoundId: String(item.compound_id), isSkip: true });
+                      setFabOpen(true);
+                    }}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  >
+                    Skip
                   </button>
                 </div>
               </Card>
@@ -311,7 +324,7 @@ export default function DashboardPage() {
 
       {/* FAB */}
       <button
-        onClick={() => setFabOpen(true)}
+        onClick={() => { setModalConfig({}); setFabOpen(true); }}
         className="fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 shadow-lg active:scale-95"
         aria-label="Log dose"
       >
@@ -322,13 +335,15 @@ export default function DashboardPage() {
       {fabOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
-          onClick={(e) => e.target === e.currentTarget && setFabOpen(false)}
+          onClick={(e) => { if (e.target === e.currentTarget) { setFabOpen(false); setModalConfig({}); } }}
         >
           <div className="w-full max-w-md overflow-y-auto rounded-t-2xl bg-white px-5 pt-5 pb-8 sm:max-h-[90vh] sm:rounded-2xl dark:bg-gray-900">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Log dose</h2>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                {modalConfig.isSkip ? "Skip dose" : "Log dose"}
+              </h2>
               <button
-                onClick={() => setFabOpen(false)}
+                onClick={() => { setFabOpen(false); setModalConfig({}); }}
                 className="text-2xl leading-none text-gray-400 dark:text-gray-500"
               >
                 ×
@@ -337,8 +352,11 @@ export default function DashboardPage() {
             <LogInjectionForm
               compounds={compounds}
               householdUsers={householdUsers}
+              initialCompoundId={modalConfig.compoundId}
+              initialIsSkip={modalConfig.isSkip}
               onSuccess={() => {
                 setFabOpen(false);
+                setModalConfig({});
                 load();
               }}
             />

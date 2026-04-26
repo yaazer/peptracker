@@ -199,7 +199,7 @@ def get_dashboard(
     timeline_rows = (
         db.query(Injection)
         .options(joinedload(Injection.injector))
-        .filter(Injection.injected_at >= thirty_ago)
+        .filter(Injection.injected_at >= thirty_ago, Injection.status == "taken")
         .all()
     )
 

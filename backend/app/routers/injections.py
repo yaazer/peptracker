@@ -153,8 +153,26 @@ def create_injection(
     else:
         injected_by_id = current_user.id
 
+    # ---- Skip short-circuit (any medication type) ----
+    if body.status == "skipped":
+        injection = Injection(
+            logged_by_user_id=current_user.id,
+            injected_by_user_id=injected_by_id,
+            compound_id=body.compound_id,
+            dose_mcg=None,
+            injection_site=None,
+            injected_at=body.injected_at,
+            notes=body.notes,
+            dose_mode="total",
+            draw_volume_ml=None,
+            component_snapshot=None,
+            quantity=None,
+            status="skipped",
+            skip_reason=body.skip_reason,
+        )
+
     # ---- Injection-type validation ----
-    if compound.medication_type == "injection":
+    elif compound.medication_type == "injection":
         if body.dose_mcg is None:
             raise HTTPException(422, "dose_mcg is required for injection medications")
         if body.injection_site is None:

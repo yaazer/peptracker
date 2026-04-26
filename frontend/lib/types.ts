@@ -89,6 +89,15 @@ export function siteLabel(value: string): string {
   return INJECTION_SITES.find((s) => s.value === value)?.label ?? value;
 }
 
+export const SKIP_REASON_LABELS: Record<string, string> = {
+  forgot: "Forgot",
+  side_effects: "Side effects",
+  out_of_stock: "Out of stock",
+  travelling: "Travelling",
+  feeling_unwell: "Feeling unwell",
+  other: "Other",
+};
+
 export function formatDatetime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     month: "short",

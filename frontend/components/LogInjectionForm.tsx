@@ -16,6 +16,8 @@ interface Props {
   compounds: CompoundRead[];
   householdUsers: HouseholdUser[];
   onSuccess?: () => void;
+  initialCompoundId?: string;
+  initialIsSkip?: boolean;
 }
 
 const MEDICATION_TYPE_LABELS: Record<string, string> = {
@@ -29,10 +31,19 @@ const MEDICATION_TYPE_LABELS: Record<string, string> = {
   other: "Other",
 };
 
-export default function LogInjectionForm({ compounds, householdUsers, onSuccess }: Props) {
+const SKIP_REASONS = [
+  { value: "forgot", label: "Forgot" },
+  { value: "side_effects", label: "Side effects" },
+  { value: "out_of_stock", label: "Out of stock" },
+  { value: "travelling", label: "Travelling" },
+  { value: "feeling_unwell", label: "Feeling unwell" },
+  { value: "other", label: "Other" },
+];
+
+export default function LogInjectionForm({ compounds, householdUsers, onSuccess, initialCompoundId, initialIsSkip }: Props) {
   const { user: currentUser } = useAuth();
 
-  const [compoundId, setCompoundId] = useState("");
+  const [compoundId, setCompoundId] = useState(initialCompoundId ?? "");
   const [doseMcg, setDoseMcg] = useState("");
   const [quantity, setQuantity] = useState("");
   const [doseMode, setDoseMode] = useState<"total" | "anchor">("total");
@@ -42,6 +53,9 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
   const [injectedById, setInjectedById] = useState<string>(
     currentUser ? String(currentUser.id) : ""
   );
+  const [isSkip, setIsSkip] = useState(initialIsSkip ?? false);
+  const [skipReason, setSkipReason] = useState("");
+  const [skipReasonOther, setSkipReasonOther] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,14 +101,17 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
     setInjectedAt(localDatetimeNow());
     setError(null);
     setBypassWarning(false);
+    setIsSkip(false);
+    setSkipReason("");
+    setSkipReasonOther("");
     setInjectedById(currentUser ? String(currentUser.id) : "");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (showDoseWarning) return;
+    if (!isSkip && showDoseWarning) return;
 
-    if (isInjection && !site) {
+    if (!isSkip && isInjection && !site) {
       setError("Pick an injection site");
       return;
     }
@@ -108,7 +125,11 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
         notes: notes || null,
       };
 
-      if (isInjection) {
+      if (isSkip) {
+        body.status = "skipped";
+        const reason = skipReason === "other" ? (skipReasonOther || null) : (skipReason || null);
+        body.skip_reason = reason;
+      } else if (isInjection) {
         body.dose_mcg = parseInt(doseMcg);
         body.injection_site = site;
         body.dose_mode = isBlend ? doseMode : "total";
@@ -198,8 +219,65 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
         </select>
       </div>
 
+      {/* Take / Skip toggle */}
+      {compoundId && (
+        <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+          <button
+            type="button"
+            onClick={() => setIsSkip(false)}
+            className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+              !isSkip
+                ? "bg-blue-600 text-white"
+                : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+            }`}
+          >
+            Take dose
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsSkip(true)}
+            className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+              isSkip
+                ? "bg-amber-500 text-white"
+                : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+            }`}
+          >
+            Skip dose
+          </button>
+        </div>
+      )}
+
+      {/* Skip reason */}
+      {isSkip && (
+        <div>
+          <label className={labelCls}>
+            Reason{" "}
+            <span className="font-normal text-gray-400 dark:text-gray-500">(optional)</span>
+          </label>
+          <select
+            value={skipReason}
+            onChange={(e) => setSkipReason(e.target.value)}
+            className={inputCls}
+          >
+            <option value="">Select reason…</option>
+            {SKIP_REASONS.map((r) => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </select>
+          {skipReason === "other" && (
+            <input
+              type="text"
+              value={skipReasonOther}
+              onChange={(e) => setSkipReasonOther(e.target.value)}
+              placeholder="Describe reason…"
+              className={`mt-2 ${inputCls}`}
+            />
+          )}
+        </div>
+      )}
+
       {/* ---- Injection-specific fields ---- */}
-      {isInjection && (
+      {!isSkip && isInjection && (
         <>
           {isBlend && (
             <div>
@@ -299,7 +377,7 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
       )}
 
       {/* ---- Non-injection (pill / liquid / etc.) fields ---- */}
-      {!isInjection && selectedCompound && (
+      {!isSkip && !isInjection && selectedCompound && (
         <div>
           <label className={labelCls}>{quantityFieldLabel(selectedCompound)}</label>
           <input
@@ -349,10 +427,12 @@ export default function LogInjectionForm({ compounds, householdUsers, onSuccess 
 
       <button
         type="submit"
-        disabled={submitting || showDoseWarning}
-        className="w-full rounded-lg bg-blue-600 py-4 text-base font-semibold text-white disabled:opacity-50"
+        disabled={submitting || (!isSkip && showDoseWarning)}
+        className={`w-full rounded-lg py-4 text-base font-semibold text-white disabled:opacity-50 ${
+          isSkip ? "bg-amber-500" : "bg-blue-600"
+        }`}
       >
-        {submitting ? "Logging…" : isInjection ? "Log injection" : "Log dose"}
+        {submitting ? "Logging…" : isSkip ? "Log skip" : isInjection ? "Log injection" : "Log dose"}
       </button>
     </form>
   );

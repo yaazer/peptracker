@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Trash2 } from "@/components/icons";
 import { apiFetch } from "@/lib/api";
-import { CompoundRead, HouseholdUser, InjectionRead, formatDatetime, siteLabel } from "@/lib/types";
+import { CompoundRead, HouseholdUser, InjectionRead, formatDatetime, siteLabel, SKIP_REASON_LABELS } from "@/lib/types";
 import { formatDose } from "@/lib/formatDose";
 import UserAttributionChip from "@/components/UserAttributionChip";
 import { useAuth } from "@/context/AuthContext";
@@ -190,10 +190,16 @@ export default function HistoryPage() {
             const isOpen = expanded.has(inj.id);
             const crossUser = inj.injected_by_user_id !== inj.logged_by_user_id;
 
+            const isSkipped = inj.status === "skipped";
+
             return (
               <div
                 key={inj.id}
-                className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+                className={`rounded-xl border shadow-sm ${
+                  isSkipped
+                    ? "border-gray-200 bg-gray-50 opacity-70 dark:border-gray-800 dark:bg-gray-900/50"
+                    : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+                }`}
               >
                 <div className="flex items-start justify-between gap-2 p-4">
                   <div className="min-w-0 flex-1">
@@ -225,18 +231,26 @@ export default function HistoryPage() {
                       </span>
                     </div>
                     <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
-                      {formatDose(compoundMap[inj.compound_id], inj)}
-                      {inj.dose_mode === "anchor" && " (anchor)"}
-                      {inj.injection_site && ` · ${siteLabel(inj.injection_site)}`}
-                      {inj.status === "skipped" && (
-                        <span className="ml-1 text-amber-500">skipped</span>
-                      )}
-                      {inj.draw_volume_ml != null && (
-                        <span className="ml-1 text-blue-600">
-                          · {(inj.draw_volume_ml * 100).toFixed(1)} units
-                        </span>
+                      {isSkipped ? (
+                        <span className="text-amber-500 font-medium">Skipped</span>
+                      ) : (
+                        <>
+                          {formatDose(compoundMap[inj.compound_id], inj)}
+                          {inj.dose_mode === "anchor" && " (anchor)"}
+                          {inj.injection_site && ` · ${siteLabel(inj.injection_site)}`}
+                          {inj.draw_volume_ml != null && (
+                            <span className="ml-1 text-blue-600">
+                              · {(inj.draw_volume_ml * 100).toFixed(1)} units
+                            </span>
+                          )}
+                        </>
                       )}
                     </p>
+                    {isSkipped && inj.skip_reason && (
+                      <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+                        Reason: {SKIP_REASON_LABELS[inj.skip_reason] ?? inj.skip_reason}
+                      </p>
+                    )}
                     {inj.notes && (
                       <p className="mt-1 text-sm text-gray-400 dark:text-gray-500">{inj.notes}</p>
                     )}
