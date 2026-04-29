@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.routers import auth, compounds, dashboard, health, injections, protocols, profile, reference, reminders, users
+from app.routers import auth, compounds, dashboard, health, injections, prescriptions, protocols, profile, reference, reminders, users
 from app.scheduler import scheduler
 
 
@@ -25,3 +25,5 @@ app.include_router(profile.router)
 app.include_router(reminders.router)
 app.include_router(users.router)
 app.include_router(reference.router)
+app.include_router(prescriptions.router)
+app.include_router(prescriptions.global_router)

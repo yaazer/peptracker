@@ -258,6 +258,8 @@ interface FormState {
   schedule: ScheduleState;
   active: boolean;
   notes: string;
+  take_with_food: boolean;
+  dosing_instructions: string;
 }
 
 const emptyForm = (selfId?: number): FormState => ({
@@ -269,6 +271,8 @@ const emptyForm = (selfId?: number): FormState => ({
   schedule: { ...defaultSchedule },
   active: true,
   notes: "",
+  take_with_food: false,
+  dosing_instructions: "",
 });
 
 function compoundById(compounds: CompoundRead[], id: string) {
@@ -333,6 +337,8 @@ export default function ProtocolsPage() {
       schedule: scheduleFromProtocol(p),
       active: p.active,
       notes: p.notes ?? "",
+      take_with_food: p.take_with_food ?? false,
+      dosing_instructions: p.dosing_instructions ?? "",
     });
     setError(null);
     setModalOpen(true);
@@ -354,6 +360,8 @@ export default function ProtocolsPage() {
       notes: form.notes || null,
       dose_mode: form.dose_mode,
       anchor_component_id: parseInt(form.anchor_component_id) || null,
+      take_with_food: form.take_with_food,
+      dosing_instructions: form.dosing_instructions || null,
     };
     if (isAdmin) {
       body.assignee_user_id = parseInt(form.assignee_user_id) || currentUser?.id;
@@ -496,6 +504,13 @@ export default function ProtocolsPage() {
                 )}
                 {p.notes && (
                   <p className="mt-1 truncate text-xs text-gray-400 dark:text-gray-500">{p.notes}</p>
+                )}
+                {(p.take_with_food || p.dosing_instructions) && (
+                  <p className="mt-1 truncate text-xs text-amber-600 dark:text-amber-400">
+                    {p.take_with_food ? "⚠ With food" : ""}
+                    {p.take_with_food && p.dosing_instructions ? " · " : ""}
+                    {p.dosing_instructions ?? ""}
+                  </p>
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-3">
@@ -726,6 +741,28 @@ export default function ProtocolsPage() {
                       placeholder="Optional"
                     />
                   </div>
+
+                  {/* Dosing instructions */}
+                  <div>
+                    <label className={labelCls}>Dosing instructions <span className="font-normal text-gray-400">(optional)</span></label>
+                    <textarea
+                      value={form.dosing_instructions}
+                      onChange={(e) => setForm({ ...form, dosing_instructions: e.target.value })}
+                      rows={2}
+                      className={inputCls}
+                      placeholder="e.g. Inject slowly, rotate sites"
+                    />
+                  </div>
+
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={form.take_with_food}
+                      onChange={(e) => setForm({ ...form, take_with_food: e.target.checked })}
+                      className="h-4 w-4 rounded"
+                    />
+                    Take with food
+                  </label>
 
                   <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <input

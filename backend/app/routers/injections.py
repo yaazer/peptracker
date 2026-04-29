@@ -232,6 +232,23 @@ def create_injection(
     db.add(injection)
     db.commit()
     db.refresh(injection)
+
+    # ---- Inventory decrement (best-effort, never blocks logging) ----
+    if body.status != "skipped" and compound.quantity_on_hand is not None:
+        try:
+            if compound.medication_type == "injection":
+                # Decrement by draw volume in mL if tracked in mL, else 1 unit
+                if injection.draw_volume_ml is not None and (compound.quantity_unit or "").lower() in ("ml", "vials"):
+                    decrement = injection.draw_volume_ml if (compound.quantity_unit or "").lower() == "ml" else 1.0
+                else:
+                    decrement = 1.0
+            else:
+                decrement = body.quantity or 1.0
+            compound.quantity_on_hand = max(0.0, compound.quantity_on_hand - decrement)
+            db.commit()
+        except Exception:
+            db.rollback()
+
     return _injection_to_read(_load_injection(injection.id, db))
 
 

@@ -130,6 +130,10 @@ class CompoundCreate(BaseModel):
     half_life_hours: float | None = None
     typical_dose_mcg_min: float | None = None
     typical_dose_mcg_max: float | None = None
+    quantity_on_hand: float | None = None
+    quantity_unit: str | None = None
+    low_stock_threshold: float | None = None
+    low_stock_days: float | None = None
 
     @model_validator(mode="after")
     def validate_medication_fields(self) -> "CompoundCreate":
@@ -183,6 +187,10 @@ class CompoundUpdate(BaseModel):
     half_life_hours: float | None = None
     typical_dose_mcg_min: float | None = None
     typical_dose_mcg_max: float | None = None
+    quantity_on_hand: float | None = None
+    quantity_unit: str | None = None
+    low_stock_threshold: float | None = None
+    low_stock_days: float | None = None
 
     @model_validator(mode="after")
     def validate_medication_fields(self) -> "CompoundUpdate":
@@ -225,6 +233,10 @@ class CompoundRead(BaseModel):
     half_life_hours: float | None
     typical_dose_mcg_min: float | None
     typical_dose_mcg_max: float | None
+    quantity_on_hand: float | None
+    quantity_unit: str | None
+    low_stock_threshold: float | None
+    low_stock_days: float | None
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +339,8 @@ class ProtocolCreate(BaseModel):
     dose_mode: str = "total"
     anchor_component_id: int | None = None
     assignee_user_id: int | None = None  # admin may set; members get self assigned
+    take_with_food: bool = False
+    dosing_instructions: str | None = None
 
     @model_validator(mode="after")
     def validate_schedule(self) -> "ProtocolCreate":
@@ -352,6 +366,8 @@ class ProtocolUpdate(BaseModel):
     dose_mode: str | None = None
     anchor_component_id: int | None = None
     assignee_user_id: int | None = None
+    take_with_food: bool | None = None
+    dosing_instructions: str | None = None
 
 
 class ProtocolRead(BaseModel):
@@ -378,6 +394,8 @@ class ProtocolRead(BaseModel):
     next_fire_at: datetime | None
     dose_mode: str
     anchor_component_id: int | None
+    take_with_food: bool
+    dosing_instructions: str | None
 
 
 # ---------------------------------------------------------------------------
@@ -462,6 +480,53 @@ class DashboardResponse(BaseModel):
     my_week_summary: WeekSummary
     recent: list[InjectionRead]
     timeline: list[TimelinePoint]
+
+
+# ---------------------------------------------------------------------------
+# Prescription
+# ---------------------------------------------------------------------------
+
+class PrescriptionCreate(BaseModel):
+    prescriber_name: str | None = None
+    pharmacy_name: str | None = None
+    rx_number: str | None = None
+    refills_remaining: int | None = None
+    expiry_date: date | None = None
+    notes: str | None = None
+    is_active: bool = True
+
+
+class PrescriptionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    compound_id: int
+    created_by_user_id: int | None
+    prescriber_name: str | None
+    pharmacy_name: str | None
+    rx_number: str | None
+    refills_remaining: int | None
+    expiry_date: date | None
+    notes: str | None
+    is_active: bool
+    created_at: datetime
+
+
+class RefillCreate(BaseModel):
+    amount: float
+    notes: str | None = None
+
+
+class RefillLogRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    compound_id: int
+    logged_by_user_id: int | None
+    amount: float
+    quantity_unit: str | None
+    notes: str | None
+    logged_at: datetime
 
 
 # ---------------------------------------------------------------------------

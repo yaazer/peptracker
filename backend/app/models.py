@@ -101,6 +101,12 @@ class Compound(Base):
     half_life_hours: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     typical_dose_mcg_min: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     typical_dose_mcg_max: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    # Inventory tracking
+    quantity_on_hand: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    quantity_unit: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    low_stock_threshold: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    low_stock_days: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    last_low_stock_alert_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     creator: Mapped["User"] = relationship(
         "User", foreign_keys=[created_by_user_id], back_populates="created_compounds"
@@ -117,6 +123,12 @@ class Compound(Base):
         back_populates="compound",
         cascade="all, delete-orphan",
         order_by="BlendComponent.position",
+    )
+    prescriptions: Mapped[list["Prescription"]] = relationship(
+        "Prescription", back_populates="compound", cascade="all, delete-orphan"
+    )
+    refill_logs: Mapped[list["RefillLog"]] = relationship(
+        "RefillLog", back_populates="compound", cascade="all, delete-orphan"
     )
 
 
@@ -204,6 +216,8 @@ class Protocol(Base):
     anchor_component_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("blend_components.id", ondelete="SET NULL"), nullable=True
     )
+    take_with_food: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    dosing_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     assignee: Mapped["User"] = relationship(
         "User", foreign_keys=[assignee_user_id], back_populates="assigned_protocols"
@@ -229,3 +243,46 @@ class ReminderLog(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     protocol: Mapped["Protocol"] = relationship("Protocol", back_populates="reminder_logs")
+
+
+class Prescription(Base):
+    __tablename__ = "prescriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    compound_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("compounds.id", ondelete="CASCADE"), nullable=False
+    )
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    prescriber_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pharmacy_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rx_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    refills_remaining: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    expiry_date: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    last_expiry_alert_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    compound: Mapped["Compound"] = relationship("Compound", back_populates="prescriptions")
+    creator: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
+
+
+class RefillLog(Base):
+    __tablename__ = "refill_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    compound_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("compounds.id", ondelete="CASCADE"), nullable=False
+    )
+    logged_by_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    amount: Mapped[float] = mapped_column(sa.Float, nullable=False)
+    quantity_unit: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    logged_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    compound: Mapped["Compound"] = relationship("Compound", back_populates="refill_logs")
+    logger: Mapped["User | None"] = relationship("User", foreign_keys=[logged_by_user_id])

@@ -53,6 +53,10 @@ export interface CompoundRead {
   half_life_hours: number | null;
   typical_dose_mcg_min: number | null;
   typical_dose_mcg_max: number | null;
+  quantity_on_hand: number | null;
+  quantity_unit: string | null;
+  low_stock_threshold: number | null;
+  low_stock_days: number | null;
 }
 
 export interface InjectionRead {
@@ -156,6 +160,32 @@ export interface ProtocolRead {
   next_fire_at: string | null;
   dose_mode: string;
   anchor_component_id: number | null;
+  take_with_food: boolean;
+  dosing_instructions: string | null;
+}
+
+export interface PrescriptionRead {
+  id: number;
+  compound_id: number;
+  created_by_user_id: number | null;
+  prescriber_name: string | null;
+  pharmacy_name: string | null;
+  rx_number: string | null;
+  refills_remaining: number | null;
+  expiry_date: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface RefillLogRead {
+  id: number;
+  compound_id: number;
+  logged_by_user_id: number | null;
+  amount: number;
+  quantity_unit: string | null;
+  notes: string | null;
+  logged_at: string;
 }
 
 export interface ReminderLogRead {
