@@ -5,6 +5,13 @@ import { CompoundRead, HouseholdUser, ProtocolRead } from "@/lib/types";
 import { getUserHexColor } from "@/lib/colors";
 import { apiFetch } from "@/lib/api";
 
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 // ---------------------------------------------------------------------------
 // Layout constants
 // ---------------------------------------------------------------------------
@@ -100,6 +107,7 @@ export default function ProtocolCalendar({
 
   const [drag, setDrag] = useState<DragState | null>(null);
   const [saving, setSaving] = useState<number | null>(null);
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Scroll today into view on mount
@@ -218,6 +226,7 @@ export default function ProtocolCalendar({
   function renderBar(p: ProtocolRead) {
     const isSaving = saving === p.id;
     const isDragging = drag?.protocolId === p.id;
+    const isHovered = hoveredId === p.id;
     const dayDelta = isDragging ? drag!.currentDayDelta : 0;
     const wasClicked = isDragging && Math.abs(drag!.currentDayDelta * DAY_PX) < MIN_DRAG_PX;
 
@@ -246,8 +255,22 @@ export default function ProtocolCalendar({
       : barWidth - Math.max(0, -startLeft);
 
     const hex = getUserHexColor(p.assignee_user_id);
-    const label = p.compound_name + (p.dose_mcg ? ` · ${p.dose_mcg.toLocaleString()} mcg` : "");
     const weekCount = cycleLen ? Math.round(cycleLen / 7) : null;
+    const showWeekBadge = weekCount != null && clampedWidth > 72;
+
+    // Chip-style: semi-transparent bg + left accent + subtle outline border
+    const borderOpacity = isHovered ? 0.55 : 0.35;
+    const barStyle: React.CSSProperties = {
+      left: clampedLeft,
+      width: clampedWidth,
+      height: ROW_H - 16,
+      backgroundColor: hexToRgba(hex, 0.12),
+      border: `1px solid ${hexToRgba(hex, borderOpacity)}`,
+      borderLeft: `3px solid ${hex}`,
+      boxShadow: isHovered ? `0 0 8px ${hexToRgba(hex, 0.25)}` : undefined,
+      cursor: isDragging && drag?.type === "move" ? "grabbing" : "grab",
+      zIndex: isDragging ? 20 : 1,
+    };
 
     return (
       <div
@@ -257,15 +280,8 @@ export default function ProtocolCalendar({
       >
         {/* Bar */}
         <div
-          className={`absolute top-2 flex items-center select-none rounded-md transition-opacity ${isSaving ? "opacity-50" : ""} ${isDragging && !wasClicked ? "opacity-80" : ""}`}
-          style={{
-            left: clampedLeft,
-            width: clampedWidth,
-            height: ROW_H - 16,
-            backgroundColor: hex,
-            cursor: isDragging && drag?.type === "move" ? "grabbing" : "grab",
-            zIndex: isDragging ? 20 : 1,
-          }}
+          className={`absolute top-2 flex items-center gap-1 select-none rounded-md transition-[box-shadow,opacity,border-color] ${isSaving ? "opacity-40" : ""} ${isDragging && !wasClicked ? "opacity-75" : ""}`}
+          style={barStyle}
           onPointerDown={(e) => {
             if ((e.target as HTMLElement).dataset.resize) return;
             e.currentTarget.setPointerCapture(e.pointerId);
@@ -279,26 +295,54 @@ export default function ProtocolCalendar({
               currentDayDelta: 0,
             });
           }}
+          onMouseEnter={() => setHoveredId(p.id)}
+          onMouseLeave={() => setHoveredId(null)}
           onClick={() => {
             if (drag === null || Math.abs((drag?.currentDayDelta ?? 0)) === 0) {
               onEditProtocol(p);
             }
           }}
         >
-          {/* Label */}
+          {/* Compound name + dose */}
           <span
-            className="truncate px-2 text-xs font-medium text-white pointer-events-none"
-            style={{ maxWidth: clampedWidth - (isFixed ? 20 : 24) }}
+            className="pointer-events-none min-w-0 truncate pl-2 text-xs font-semibold"
+            style={{
+              color: hex,
+              maxWidth: clampedWidth - (showWeekBadge ? 48 : isFixed ? 16 : 24),
+            }}
           >
-            {label}
-            {weekCount != null && clampedWidth > 80 && (
-              <span className="ml-1 opacity-70">({weekCount}w)</span>
+            {p.compound_name}
+            {p.dose_mcg != null && (
+              <span
+                className="font-normal"
+                style={{ color: hexToRgba(hex, 0.65) }}
+              >
+                {` · ${p.dose_mcg.toLocaleString()} mcg`}
+              </span>
             )}
           </span>
 
+          {/* Week count badge */}
+          {showWeekBadge && (
+            <span
+              className="pointer-events-none ml-auto mr-1 shrink-0 rounded px-1 py-0.5 text-[10px] font-medium leading-none"
+              style={{
+                backgroundColor: hexToRgba(hex, 0.18),
+                color: hex,
+              }}
+            >
+              {weekCount}w
+            </span>
+          )}
+
           {/* Open-ended arrow */}
           {!isFixed && (
-            <span className="ml-auto mr-1 shrink-0 text-sm text-white/80 pointer-events-none">→</span>
+            <span
+              className="ml-auto mr-1.5 shrink-0 text-xs pointer-events-none"
+              style={{ color: hexToRgba(hex, 0.7) }}
+            >
+              →
+            </span>
           )}
 
           {/* Resize handle — fixed cycle only */}
@@ -306,7 +350,7 @@ export default function ProtocolCalendar({
             <div
               data-resize="true"
               className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize flex items-center justify-center"
-              style={{ borderRadius: "0 6px 6px 0" }}
+              style={{ borderRadius: "0 5px 5px 0" }}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 e.currentTarget.setPointerCapture(e.pointerId);
@@ -321,7 +365,12 @@ export default function ProtocolCalendar({
                 });
               }}
             >
-              <span className="text-white/60 text-[10px] pointer-events-none select-none">⋮</span>
+              <span
+                className="text-[10px] pointer-events-none select-none"
+                style={{ color: hexToRgba(hex, 0.5) }}
+              >
+                ⋮
+              </span>
             </div>
           )}
         </div>
