@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Bell, Pencil, Plus, Trash2 } from "@/components/icons";
 import { apiFetch } from "@/lib/api";
@@ -10,6 +11,8 @@ import { calculateBlend, type BlendComponentInput } from "@/lib/reconstitution";
 import BlendResultCard from "@/components/BlendResultCard";
 import UserAttributionChip from "@/components/UserAttributionChip";
 import { useAuth } from "@/context/AuthContext";
+
+const ProtocolCalendar = dynamic(() => import("@/components/ProtocolCalendar"), { ssr: false });
 
 // ---------------------------------------------------------------------------
 // Schedule helpers
@@ -248,6 +251,7 @@ function ScheduleHelper({
 // ---------------------------------------------------------------------------
 
 type FilterMode = "all" | "mine" | "person";
+type ViewMode = "list" | "calendar";
 
 interface FormState {
   compound_id: string;
@@ -260,6 +264,10 @@ interface FormState {
   notes: string;
   take_with_food: boolean;
   dosing_instructions: string;
+  cycle_mode: "open" | "fixed";
+  cycle_length_days: string;
+  cycle_end_date: string;
+  schedule_start_date: string;
 }
 
 const emptyForm = (selfId?: number): FormState => ({
@@ -273,6 +281,10 @@ const emptyForm = (selfId?: number): FormState => ({
   notes: "",
   take_with_food: false,
   dosing_instructions: "",
+  cycle_mode: "open",
+  cycle_length_days: "",
+  cycle_end_date: "",
+  schedule_start_date: "",
 });
 
 function compoundById(compounds: CompoundRead[], id: string) {
@@ -289,6 +301,7 @@ export default function ProtocolsPage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [filterPersonId, setFilterPersonId] = useState<string>("");
+  const [view, setView] = useState<ViewMode>("list");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ProtocolRead | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm(currentUser?.id));
@@ -339,6 +352,10 @@ export default function ProtocolsPage() {
       notes: p.notes ?? "",
       take_with_food: p.take_with_food ?? false,
       dosing_instructions: p.dosing_instructions ?? "",
+      cycle_mode: p.cycle_length_days != null ? "fixed" : "open",
+      cycle_length_days: p.cycle_length_days != null ? String(p.cycle_length_days) : "",
+      cycle_end_date: p.cycle_end_date ?? "",
+      schedule_start_date: p.schedule_start_date ?? "",
     });
     setError(null);
     setModalOpen(true);
@@ -362,6 +379,13 @@ export default function ProtocolsPage() {
       anchor_component_id: parseInt(form.anchor_component_id) || null,
       take_with_food: form.take_with_food,
       dosing_instructions: form.dosing_instructions || null,
+      schedule_start_date: form.schedule_start_date || null,
+      cycle_length_days: form.cycle_mode === "fixed" && form.cycle_length_days
+        ? parseInt(form.cycle_length_days)
+        : null,
+      cycle_end_date: form.cycle_mode === "fixed" && form.cycle_end_date
+        ? form.cycle_end_date
+        : null,
     };
     if (isAdmin) {
       body.assignee_user_id = parseInt(form.assignee_user_id) || currentUser?.id;
@@ -423,8 +447,25 @@ export default function ProtocolsPage() {
         </div>
       </div>
 
-      {/* Filters row */}
+      {/* View toggle + Filters row */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
+        {/* View toggle */}
+        <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+          {(["list", "calendar"] as ViewMode[]).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                view === v
+                  ? "bg-blue-600 text-white"
+                  : "bg-white text-gray-600 dark:bg-gray-900 dark:text-gray-400"
+              }`}
+            >
+              {v === "list" ? "List" : "Calendar"}
+            </button>
+          ))}
+        </div>
+
         <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
           {(["all", "mine", "person"] as FilterMode[]).map((m) => (
             <button
@@ -463,13 +504,40 @@ export default function ProtocolsPage() {
         </label>
       </div>
 
-      {visibleProtocols.length === 0 && (
+      {/* Calendar view */}
+      {view === "calendar" && (
+        <ProtocolCalendar
+          protocols={visibleProtocols}
+          compounds={compounds}
+          householdUsers={householdUsers}
+          isAdmin={isAdmin}
+          onProtocolUpdated={() => load()}
+          onCreateProtocol={(compoundId, startDate) => {
+            const c = compounds.find((x) => x.id === compoundId);
+            const isInjection = !c || c.medication_type === "injection";
+            setEditing(null);
+            setForm({
+              ...emptyForm(currentUser?.id),
+              compound_id: String(compoundId),
+              schedule_start_date: startDate,
+              cycle_mode: isInjection ? "fixed" : "open",
+              cycle_length_days: isInjection ? "56" : "",
+            });
+            setError(null);
+            setModalOpen(true);
+          }}
+          onEditProtocol={(p) => openEdit(p)}
+        />
+      )}
+
+      {/* List view */}
+      {view === "list" && visibleProtocols.length === 0 && (
         <p className="mt-12 text-center text-gray-400 dark:text-gray-500">
           No protocols yet. Tap Add to create one.
         </p>
       )}
 
-      <div className="space-y-3">
+      {view === "list" && <div className="space-y-3">
         {visibleProtocols.map((p) => (
           <div
             key={p.id}
@@ -546,7 +614,7 @@ export default function ProtocolsPage() {
             </div>
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Add / Edit modal */}
       {modalOpen && (
@@ -733,6 +801,62 @@ export default function ProtocolsPage() {
                       value={form.schedule}
                       onChange={(schedule) => setForm({ ...form, schedule })}
                     />
+                  </div>
+
+                  {/* Start date */}
+                  <div>
+                    <label className={labelCls}>Start date <span className="font-normal text-gray-400">(optional)</span></label>
+                    <input
+                      type="date"
+                      value={form.schedule_start_date}
+                      onChange={(e) => setForm({ ...form, schedule_start_date: e.target.value })}
+                      className={inputCls}
+                    />
+                  </div>
+
+                  {/* Cycle mode */}
+                  <div>
+                    <label className={labelCls}>Cycle</label>
+                    <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+                      {(["open", "fixed"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setForm({ ...form, cycle_mode: mode, cycle_length_days: mode === "fixed" ? (form.cycle_length_days || "56") : "", cycle_end_date: "" })}
+                          className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                            form.cycle_mode === mode
+                              ? "bg-blue-600 text-white"
+                              : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                          }`}
+                        >
+                          {mode === "open" ? "Open-ended" : "Fixed cycle"}
+                        </button>
+                      ))}
+                    </div>
+                    {form.cycle_mode === "fixed" && (
+                      <div className="mt-2 flex gap-2">
+                        <div className="flex-1">
+                          <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">Length (days)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={form.cycle_length_days}
+                            onChange={(e) => setForm({ ...form, cycle_length_days: e.target.value })}
+                            className={inputCls}
+                            placeholder="e.g. 56"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">End date (optional override)</label>
+                          <input
+                            type="date"
+                            value={form.cycle_end_date}
+                            onChange={(e) => setForm({ ...form, cycle_end_date: e.target.value })}
+                            className={inputCls}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Notes */}

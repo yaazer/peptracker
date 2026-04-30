@@ -162,6 +162,8 @@ export interface ProtocolRead {
   anchor_component_id: number | null;
   take_with_food: boolean;
   dosing_instructions: string | null;
+  cycle_length_days: number | null;
+  cycle_end_date: string | null;
 }
 
 export interface PrescriptionRead {

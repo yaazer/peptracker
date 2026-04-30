@@ -341,6 +341,8 @@ class ProtocolCreate(BaseModel):
     assignee_user_id: int | None = None  # admin may set; members get self assigned
     take_with_food: bool = False
     dosing_instructions: str | None = None
+    cycle_length_days: int | None = None
+    cycle_end_date: date | None = None
 
     @model_validator(mode="after")
     def validate_schedule(self) -> "ProtocolCreate":
@@ -368,6 +370,8 @@ class ProtocolUpdate(BaseModel):
     assignee_user_id: int | None = None
     take_with_food: bool | None = None
     dosing_instructions: str | None = None
+    cycle_length_days: int | None = None
+    cycle_end_date: date | None = None
 
 
 class ProtocolRead(BaseModel):
@@ -396,6 +400,8 @@ class ProtocolRead(BaseModel):
     anchor_component_id: int | None
     take_with_food: bool
     dosing_instructions: str | None
+    cycle_length_days: int | None
+    cycle_end_date: date | None
 
 
 # ---------------------------------------------------------------------------

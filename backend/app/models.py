@@ -218,6 +218,8 @@ class Protocol(Base):
     )
     take_with_food: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     dosing_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cycle_length_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cycle_end_date: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
 
     assignee: Mapped["User"] = relationship(
         "User", foreign_keys=[assignee_user_id], back_populates="assigned_protocols"

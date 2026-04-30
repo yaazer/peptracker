@@ -44,6 +44,8 @@ def _to_read(p: Protocol) -> ProtocolRead:
         anchor_component_id=p.anchor_component_id,
         take_with_food=p.take_with_food,
         dosing_instructions=p.dosing_instructions,
+        cycle_length_days=p.cycle_length_days,
+        cycle_end_date=p.cycle_end_date,
     )
 
 
@@ -111,6 +113,10 @@ def create_protocol(
         notes=body.notes,
         dose_mode=body.dose_mode,
         anchor_component_id=body.anchor_component_id,
+        take_with_food=body.take_with_food,
+        dosing_instructions=body.dosing_instructions,
+        cycle_length_days=body.cycle_length_days,
+        cycle_end_date=body.cycle_end_date,
     )
     db.add(p)
     db.commit()
