@@ -18,6 +18,8 @@ const MEDICATION_TYPE_LABELS: Record<MedicationType, string> = {
   sublingual: "Sublingual",
   inhaled: "Inhaled",
   other: "Other",
+  supplement_pill: "Supplement (pill/capsule)",
+  supplement_powder: "Supplement (powder)",
 };
 
 const STRENGTH_UNITS: Record<string, string[]> = {
@@ -28,6 +30,8 @@ const STRENGTH_UNITS: Record<string, string[]> = {
   sublingual: ["mcg", "mg"],
   inhaled:   ["mcg", "mg"],
   other:     ["mcg", "mg", "mg/ml"],
+  supplement_pill:   ["mcg", "mg"],
+  supplement_powder: ["mg", "g"],
 };
 
 const RX_EXPIRY_WARNING_DAYS = 14;
@@ -805,6 +809,7 @@ export default function CompoundsPage() {
                     const newType = e.target.value as MedicationType;
                     const defaultDoseUnit: Partial<Record<MedicationType, string>> = {
                       tablet: "tablet", capsule: "capsule", liquid: "ml",
+                      supplement_pill: "capsule", supplement_powder: "scoop",
                     };
                     setForm({
                       ...form,
@@ -821,9 +826,16 @@ export default function CompoundsPage() {
                   }}
                   className={inputCls}
                 >
-                  {MEDICATION_TYPES.map((t) => (
-                    <option key={t} value={t}>{MEDICATION_TYPE_LABELS[t]}</option>
-                  ))}
+                  <option value="injection">Injection</option>
+                  <optgroup label="Oral / Topical">
+                    {(["tablet","capsule","liquid","sublingual","inhaled","topical","other"] as MedicationType[]).map((t) => (
+                      <option key={t} value={t}>{MEDICATION_TYPE_LABELS[t]}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Supplement">
+                    <option value="supplement_pill">Supplement (pill/capsule)</option>
+                    <option value="supplement_powder">Supplement (powder)</option>
+                  </optgroup>
                 </select>
               </section>
 
@@ -903,7 +915,7 @@ export default function CompoundsPage() {
                         onChange={(e) => setForm({ ...form, strength_amount: e.target.value })}
                         className={inputCls}
                         placeholder="e.g. 500"
-                        required={["tablet","capsule","liquid"].includes(form.medication_type)}
+                        required={["tablet","capsule","liquid","supplement_pill"].includes(form.medication_type)}
                       />
                     </div>
                     <div>
@@ -912,7 +924,7 @@ export default function CompoundsPage() {
                         value={form.strength_unit}
                         onChange={(e) => setForm({ ...form, strength_unit: e.target.value })}
                         className={inputCls}
-                        required={["tablet","capsule","liquid"].includes(form.medication_type)}
+                        required={["tablet","capsule","liquid","supplement_pill"].includes(form.medication_type)}
                       >
                         <option value="">Select unit…</option>
                         {(STRENGTH_UNITS[form.medication_type] ?? ["mcg","mg"]).map((u) => (
@@ -928,7 +940,7 @@ export default function CompoundsPage() {
                       onChange={(e) => setForm({ ...form, dose_unit: e.target.value })}
                       className={inputCls}
                     >
-                      {["tablet","capsule","ml","drop","puff","patch","mcg","mg","other"].map((u) => (
+                      {["tablet","capsule","ml","drop","puff","patch","scoop","serving","mcg","mg","g","other"].map((u) => (
                         <option key={u} value={u}>{u}</option>
                       ))}
                     </select>
@@ -1065,7 +1077,7 @@ export default function CompoundsPage() {
                       list="quantity-unit-suggestions"
                     />
                     <datalist id="quantity-unit-suggestions">
-                      {["vials", "tablets", "capsules", "mL", "mg"].map((u) => (
+                      {["vials", "tablets", "capsules", "scoops", "servings", "mL", "mg", "g"].map((u) => (
                         <option key={u} value={u} />
                       ))}
                     </datalist>

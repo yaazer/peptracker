@@ -22,6 +22,7 @@ export interface ComponentSnapshot {
 
 export const MEDICATION_TYPES = [
   "injection", "tablet", "capsule", "liquid", "topical", "sublingual", "inhaled", "other",
+  "supplement_pill", "supplement_powder",
 ] as const;
 export type MedicationType = typeof MEDICATION_TYPES[number];
 

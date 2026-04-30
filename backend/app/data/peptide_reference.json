@@ -230,5 +230,79 @@
     "dose_unit": "mg",
     "route": "subcutaneous",
     "notes": "NNMT inhibitor."
+  },
+  {
+    "name": "Vitamin D3",
+    "aliases": ["Cholecalciferol", "Vitamin D"],
+    "medication_type": "supplement_pill",
+    "dose_unit": "capsule",
+    "route": "oral",
+    "typical_dose_mcg_min": 1000,
+    "typical_dose_mcg_max": 5000,
+    "notes": "Fat-soluble vitamin. Typical doses 1000–5000 IU (25–125 mcg)."
+  },
+  {
+    "name": "Magnesium Glycinate",
+    "aliases": ["Magnesium bisglycinate", "Mag Glycinate"],
+    "medication_type": "supplement_pill",
+    "dose_unit": "capsule",
+    "route": "oral",
+    "notes": "Chelated magnesium form with high bioavailability."
+  },
+  {
+    "name": "Zinc",
+    "aliases": ["Zinc Picolinate", "Zinc Bisglycinate"],
+    "medication_type": "supplement_pill",
+    "dose_unit": "capsule",
+    "route": "oral",
+    "notes": "Essential mineral. Common dose 15–50 mg/day."
+  },
+  {
+    "name": "Fish Oil",
+    "aliases": ["Omega-3", "EPA/DHA", "Omega 3"],
+    "medication_type": "supplement_pill",
+    "dose_unit": "capsule",
+    "route": "oral",
+    "notes": "Omega-3 fatty acids (EPA + DHA). Cardiovascular and anti-inflammatory."
+  },
+  {
+    "name": "Vitamin B12",
+    "aliases": ["Methylcobalamin", "Cyanocobalamin", "Cobalamin"],
+    "medication_type": "supplement_pill",
+    "dose_unit": "capsule",
+    "route": "oral",
+    "notes": "Essential B vitamin. Methylcobalamin preferred for bioavailability."
+  },
+  {
+    "name": "NAC",
+    "aliases": ["N-Acetyl Cysteine", "N-Acetylcysteine"],
+    "medication_type": "supplement_pill",
+    "dose_unit": "capsule",
+    "route": "oral",
+    "notes": "Glutathione precursor. Antioxidant and liver support."
+  },
+  {
+    "name": "Berberine",
+    "aliases": ["Berberine HCl"],
+    "medication_type": "supplement_pill",
+    "dose_unit": "capsule",
+    "route": "oral",
+    "notes": "Metabolic support. Common dose 500 mg 2–3x/day."
+  },
+  {
+    "name": "Creatine Monohydrate",
+    "aliases": ["Creatine", "Monohydrate"],
+    "medication_type": "supplement_powder",
+    "dose_unit": "scoop",
+    "route": "oral",
+    "notes": "Performance supplement. Typical dose 3–5 g/day."
+  },
+  {
+    "name": "Collagen Peptides",
+    "aliases": ["Collagen Powder", "Hydrolyzed Collagen"],
+    "medication_type": "supplement_powder",
+    "dose_unit": "scoop",
+    "route": "oral",
+    "notes": "Connective tissue support. Common dose 10–20 g/day."
   }
 ]

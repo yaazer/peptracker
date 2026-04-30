@@ -7,11 +7,13 @@ export type DoseableCompound = Pick<
 
 const UNIT_SINGULAR: Record<string, string> = {
   tablet: "tablet", capsule: "capsule", ml: "mL",
-  mg: "mg", mcg: "mcg", drop: "drop", puff: "puff", patch: "patch",
+  mg: "mg", mcg: "mcg", g: "g", drop: "drop", puff: "puff", patch: "patch",
+  scoop: "scoop", serving: "serving",
 };
 const UNIT_PLURAL: Record<string, string> = {
   tablet: "tablets", capsule: "capsules", ml: "mL",
-  mg: "mg", mcg: "mcg", drop: "drops", puff: "puffs", patch: "patches",
+  mg: "mg", mcg: "mcg", g: "g", drop: "drops", puff: "puffs", patch: "patches",
+  scoop: "scoops", serving: "servings",
 };
 const FIELD_LABELS: Record<string, string> = {
   tablet: "Quantity (tablets)",
@@ -19,9 +21,12 @@ const FIELD_LABELS: Record<string, string> = {
   ml: "Volume (mL)",
   mg: "Dose (mg)",
   mcg: "Dose (mcg)",
+  g: "Dose (g)",
   drop: "Quantity (drops)",
   puff: "Quantity (puffs)",
   patch: "Quantity (patches)",
+  scoop: "Quantity (scoops)",
+  serving: "Quantity (servings)",
 };
 
 export function quantityFieldLabel(compound: DoseableCompound): string {

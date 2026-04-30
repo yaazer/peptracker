@@ -278,7 +278,8 @@ def _search_local(q: str) -> list[dict]:
 # Public API
 # ---------------------------------------------------------------------------
 
-_PILL_TYPES = frozenset({"tablet", "capsule", "liquid", "topical", "sublingual", "inhaled", "other"})
+_PILL_TYPES = frozenset({"tablet", "capsule", "liquid", "topical", "sublingual", "inhaled", "other",
+                         "supplement_pill", "supplement_powder"})
 _INJECTION_TYPES = frozenset({"injection"})
 
 
@@ -292,7 +293,8 @@ async def search(q: str, med_type: str | None) -> list[dict]:
     if len(q) < 2:
         return []
 
-    use_local = med_type is None or med_type in _INJECTION_TYPES
+    _SUPPLEMENT_TYPES = frozenset({"supplement_pill", "supplement_powder"})
+    use_local = med_type is None or med_type in _INJECTION_TYPES or med_type in _SUPPLEMENT_TYPES
     use_rxnorm = med_type is None or med_type in _PILL_TYPES
 
     local: list[dict] = _search_local(q) if use_local else []

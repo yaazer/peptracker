@@ -7,10 +7,11 @@ from pydantic import BaseModel, ConfigDict, EmailStr, field_validator, model_val
 from app.models import InjectionSite
 
 MEDICATION_TYPES = frozenset(
-    {"injection", "tablet", "capsule", "liquid", "topical", "sublingual", "inhaled", "other"}
+    {"injection", "tablet", "capsule", "liquid", "topical", "sublingual", "inhaled", "other",
+     "supplement_pill", "supplement_powder"}
 )
 DOSE_UNITS = frozenset(
-    {"mcg", "mg", "g", "ml", "tablet", "capsule", "drop", "puff", "patch", "other"}
+    {"mcg", "mg", "g", "ml", "tablet", "capsule", "drop", "puff", "patch", "scoop", "serving", "other"}
 )
 ROUTES = frozenset(
     {"oral", "subcutaneous", "intramuscular", "sublingual", "topical",
@@ -154,7 +155,7 @@ class CompoundCreate(BaseModel):
                     "concentration_mg_per_ml and vial_size_mg are only valid for injection medications"
                 )
             # Require strength fields for pill/liquid types
-            if self.medication_type in ("tablet", "capsule", "liquid"):
+            if self.medication_type in ("tablet", "capsule", "liquid", "supplement_pill"):
                 if self.strength_amount is None or not self.strength_unit:
                     raise ValueError(
                         f"strength_amount and strength_unit are required for {self.medication_type} medications"
