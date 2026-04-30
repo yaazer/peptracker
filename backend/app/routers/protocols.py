@@ -19,10 +19,11 @@ def _utcnow() -> datetime:
 def _to_read(p: Protocol) -> ProtocolRead:
     anchor = p.last_fired_at or p.created_at
     next_fire = _next_fire_structured(p, anchor)
+    assignee_alive = p.assignee is not None and p.assignee.deleted_at is None
     return ProtocolRead(
         id=p.id,
         assignee_user_id=p.assignee_user_id,
-        assignee_name=p.assignee.name if p.assignee else "Unknown",
+        assignee_name=p.assignee.name if assignee_alive else "Deleted user",
         created_by_user_id=p.created_by_user_id,
         compound_id=p.compound_id,
         compound_name=p.compound.name,
@@ -41,6 +42,8 @@ def _to_read(p: Protocol) -> ProtocolRead:
         next_fire_at=next_fire,
         dose_mode=p.dose_mode,
         anchor_component_id=p.anchor_component_id,
+        take_with_food=p.take_with_food,
+        dosing_instructions=p.dosing_instructions,
     )
 
 

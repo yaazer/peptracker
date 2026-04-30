@@ -485,12 +485,17 @@ export default function ProtocolsPage() {
                     </span>
                   )}
                 </div>
-                <div className="mt-1">
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
                   <UserAttributionChip
                     userId={p.assignee_user_id}
                     userName={p.assignee_name}
                     size="sm"
                   />
+                  {!householdUsers.some((u) => u.id === p.assignee_user_id) && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                      Unassigned — user deleted
+                    </span>
+                  )}
                 </div>
                 <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
                   {humanSchedule(p)}

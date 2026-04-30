@@ -91,7 +91,7 @@ export function formatDose(
     const uMcg = _unitMcg(compound);
     if (uMcg) {
       const qty = inj.dose_mcg / uMcg;
-      if (qty > 0 && qty < 10_000) {
+      if (qty >= 0.05 && qty < 10_000) {
         const qtyStr = qty % 1 === 0 ? String(qty) : qty.toFixed(1);
         const unitLabel = qty === 1 ? singular : plural;
         if (sa && su) return `${qtyStr} ${unitLabel} (${sa * qty} ${su})`;
