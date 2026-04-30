@@ -260,23 +260,23 @@ export default function ProtocolCalendar({
       ? Math.max(DAY_PX * 2, barWidth - Math.max(0, -startLeft))
       : barWidth - Math.max(0, -startLeft);
 
-    // Compound color (matches chip palette) is the hero; user color is secondary.
-    const hex = getUserHexColor(compoundColorIndex.get(p.compound_id) ?? 0);
+    // userHex = who is taking it → bar fill + outline
+    // compoundHex = what compound it is → left border accent + text
     const userHex = getUserHexColor(p.assignee_user_id);
+    const compoundHex = getUserHexColor(compoundColorIndex.get(p.compound_id) ?? 0);
     const weekCount = cycleLen ? Math.round(cycleLen / 7) : null;
     const showWeekBadge = weekCount != null && clampedWidth > 72;
 
-    // Chip-style: semi-transparent bg + left accent + subtle outline border
-    const borderOpacity = isHovered ? 0.55 : 0.35;
+    const bgOpacity = isHovered ? 0.20 : 0.13;
+    const outlineOpacity = isHovered ? 0.55 : 0.35;
     const barStyle: React.CSSProperties = {
       left: clampedLeft,
       width: clampedWidth,
       height: ROW_H - 16,
-      backgroundColor: hexToRgba(hex, 0.12),
-      border: `1px solid ${hexToRgba(hex, borderOpacity)}`,
-      borderLeft: `3px solid ${hex}`,
-      borderBottom: `2px solid ${hexToRgba(userHex, 0.6)}`,
-      boxShadow: isHovered ? `0 0 8px ${hexToRgba(hex, 0.25)}` : undefined,
+      backgroundColor: hexToRgba(userHex, bgOpacity),
+      border: `1px solid ${hexToRgba(userHex, outlineOpacity)}`,
+      borderLeft: `4px solid ${compoundHex}`,
+      boxShadow: isHovered ? `0 0 8px ${hexToRgba(userHex, 0.5)}` : undefined,
       cursor: isDragging && drag?.type === "move" ? "grabbing" : "grab",
       zIndex: isDragging ? 20 : 1,
     };
@@ -289,7 +289,7 @@ export default function ProtocolCalendar({
       >
         {/* Bar */}
         <div
-          className={`absolute top-2 flex items-center gap-1 select-none rounded-md transition-[box-shadow,opacity,border-color] ${isSaving ? "opacity-40" : ""} ${isDragging && !wasClicked ? "opacity-75" : ""}`}
+          className={`absolute top-2 flex items-center gap-1 select-none rounded-md transition-[box-shadow,background-color,border-color,opacity] duration-150 ${isSaving ? "opacity-40" : ""} ${isDragging && !wasClicked ? "opacity-75" : ""}`}
           style={barStyle}
           onPointerDown={(e) => {
             if ((e.target as HTMLElement).dataset.resize) return;
@@ -316,7 +316,7 @@ export default function ProtocolCalendar({
           <span
             className="pointer-events-none min-w-0 truncate pl-2 text-xs font-semibold"
             style={{
-              color: hex,
+              color: compoundHex,
               maxWidth: clampedWidth - (showWeekBadge ? 48 : isFixed ? 16 : 24),
             }}
           >
@@ -324,7 +324,7 @@ export default function ProtocolCalendar({
             {p.dose_mcg != null && (
               <span
                 className="font-normal"
-                style={{ color: hexToRgba(hex, 0.65) }}
+                style={{ color: hexToRgba(compoundHex, 0.65) }}
               >
                 {` · ${p.dose_mcg.toLocaleString()} mcg`}
               </span>
@@ -336,8 +336,8 @@ export default function ProtocolCalendar({
             <span
               className="pointer-events-none ml-auto mr-1 shrink-0 rounded px-1 py-0.5 text-[10px] font-medium leading-none"
               style={{
-                backgroundColor: hexToRgba(hex, 0.18),
-                color: hex,
+                backgroundColor: hexToRgba(compoundHex, 0.18),
+                color: compoundHex,
               }}
             >
               {weekCount}w
@@ -348,7 +348,7 @@ export default function ProtocolCalendar({
           {!isFixed && (
             <span
               className="ml-auto mr-1.5 shrink-0 text-xs pointer-events-none"
-              style={{ color: hexToRgba(hex, 0.7) }}
+              style={{ color: hexToRgba(compoundHex, 0.7) }}
             >
               →
             </span>
@@ -376,7 +376,7 @@ export default function ProtocolCalendar({
             >
               <span
                 className="text-[10px] pointer-events-none select-none"
-                style={{ color: hexToRgba(hex, 0.5) }}
+                style={{ color: hexToRgba(compoundHex, 0.5) }}
               >
                 ⋮
               </span>
