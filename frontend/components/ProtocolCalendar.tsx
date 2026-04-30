@@ -19,7 +19,12 @@ const MIN_DRAG_PX = 4;   // below this threshold a pointer move = click
 // Date helpers (no library)
 // ---------------------------------------------------------------------------
 function toDateStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // Use local date parts — toISOString() converts to UTC first, which shifts
+  // the date for users in UTC+ timezones (midnight local = previous day UTC).
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function parseDate(s: string): Date {
@@ -136,11 +141,11 @@ export default function ProtocolCalendar({
           body.cycle_end_date = toDateStr(addDays(parseDate(originalEndDate), currentDayDelta));
         }
       } else {
-        // resize
+        // resize — cycle_end_date is the inclusive last day, so offset by newLen - 1
         const newLen = Math.max(1, (originalCycleLen ?? 56) + currentDayDelta);
         body.cycle_length_days = newLen;
         if (originalStartDate) {
-          body.cycle_end_date = toDateStr(addDays(parseDate(originalStartDate), newLen));
+          body.cycle_end_date = toDateStr(addDays(parseDate(originalStartDate), newLen - 1));
         }
       }
 
@@ -220,9 +225,18 @@ export default function ProtocolCalendar({
     const displayStart = addDays(baseStart, drag?.type === "move" ? dayDelta : 0);
     const startLeft = diffDays(displayStart, viewStart) * DAY_PX;
 
+    // Prefer cycle_length_days; fall back to cycle_end_date (inclusive last day → +1).
+    // This handles protocols where only cycle_end_date was set via the form.
+    const baseCycleLen: number | null =
+      p.cycle_length_days != null
+        ? p.cycle_length_days
+        : p.cycle_end_date
+          ? Math.max(1, diffDays(parseDate(p.cycle_end_date), baseStart) + 1)
+          : null;
+
     const cycleLen = drag?.type === "resize" && isDragging
-      ? Math.max(1, (p.cycle_length_days ?? 56) + dayDelta)
-      : p.cycle_length_days;
+      ? Math.max(1, (baseCycleLen ?? 56) + dayDelta)
+      : baseCycleLen;
 
     const isFixed = cycleLen != null;
     const barWidth = isFixed ? cycleLen! * DAY_PX : canvasWidth - Math.max(0, startLeft);
