@@ -110,6 +110,12 @@ export default function ProtocolCalendar({
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
+  // Map compound_id → its index in the non-archived compound list, which is the
+  // same seed used by the chip palette so bars and chips share the same color.
+  const compoundColorIndex = new Map(
+    compounds.filter((c) => !c.archived).map((c, i) => [c.id, i])
+  );
+
   // Scroll today into view on mount
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -254,7 +260,9 @@ export default function ProtocolCalendar({
       ? Math.max(DAY_PX * 2, barWidth - Math.max(0, -startLeft))
       : barWidth - Math.max(0, -startLeft);
 
-    const hex = getUserHexColor(p.assignee_user_id);
+    // Compound color (matches chip palette) is the hero; user color is secondary.
+    const hex = getUserHexColor(compoundColorIndex.get(p.compound_id) ?? 0);
+    const userHex = getUserHexColor(p.assignee_user_id);
     const weekCount = cycleLen ? Math.round(cycleLen / 7) : null;
     const showWeekBadge = weekCount != null && clampedWidth > 72;
 
@@ -267,6 +275,7 @@ export default function ProtocolCalendar({
       backgroundColor: hexToRgba(hex, 0.12),
       border: `1px solid ${hexToRgba(hex, borderOpacity)}`,
       borderLeft: `3px solid ${hex}`,
+      borderBottom: `2px solid ${hexToRgba(userHex, 0.6)}`,
       boxShadow: isHovered ? `0 0 8px ${hexToRgba(hex, 0.25)}` : undefined,
       cursor: isDragging && drag?.type === "move" ? "grabbing" : "grab",
       zIndex: isDragging ? 20 : 1,
