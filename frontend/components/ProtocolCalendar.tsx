@@ -267,8 +267,8 @@ export default function ProtocolCalendar({
     const weekCount = cycleLen ? Math.round(cycleLen / 7) : null;
     const showWeekBadge = weekCount != null && clampedWidth > 72;
 
-    const bgOpacity = isHovered ? 0.20 : 0.13;
-    const outlineOpacity = isHovered ? 0.55 : 0.35;
+    const bgOpacity = isHovered ? 0.28 : 0.18;
+    const outlineOpacity = isHovered ? 0.60 : 0.38;
     const barStyle: React.CSSProperties = {
       left: clampedLeft,
       width: clampedWidth,
@@ -276,7 +276,8 @@ export default function ProtocolCalendar({
       backgroundColor: hexToRgba(userHex, bgOpacity),
       border: `1px solid ${hexToRgba(userHex, outlineOpacity)}`,
       borderLeft: `4px solid ${compoundHex}`,
-      boxShadow: isHovered ? `0 0 8px ${hexToRgba(userHex, 0.5)}` : undefined,
+      // "none" not undefined — undefined removes the property, bypassing CSS transition
+      boxShadow: isHovered ? `0 0 8px ${hexToRgba(userHex, 0.5)}` : "none",
       cursor: isDragging && drag?.type === "move" ? "grabbing" : "grab",
       zIndex: isDragging ? 20 : 1,
     };
@@ -289,7 +290,7 @@ export default function ProtocolCalendar({
       >
         {/* Bar */}
         <div
-          className={`absolute top-2 flex items-center gap-1 select-none rounded-md transition-[box-shadow,background-color,border-color,opacity] duration-150 ${isSaving ? "opacity-40" : ""} ${isDragging && !wasClicked ? "opacity-75" : ""}`}
+          className={`absolute top-2 flex items-center gap-1 select-none rounded-md transition-[box-shadow,border-color] duration-150 ${isSaving ? "opacity-40" : ""} ${isDragging && !wasClicked ? "opacity-75" : ""}`}
           style={barStyle}
           onPointerDown={(e) => {
             if ((e.target as HTMLElement).dataset.resize) return;
