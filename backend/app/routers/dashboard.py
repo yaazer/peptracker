@@ -7,12 +7,13 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Compound, Injection, Protocol, User
-from app.schedule_utils import _next_fire_structured
+from app.schedule_utils import _fire_dates_in_range, _next_fire_structured
 from app.schemas import (
     DashboardResponse,
     LastByCompoundItem,
     NextDoseItem,
     TimelinePoint,
+    TimelineScheduledPoint,
     UserDoseSummary,
     WeekCompoundSummary,
     WeekSummary,
@@ -244,6 +245,51 @@ def get_dashboard(
         for k, v in sorted(tl_map.items())
     ]
 
+    # ------------------------------------------------------------------
+    # 6. Projected scheduled doses — active protocols with no logged dose
+    #    on a given date for that compound (shows unlogged upcoming/past doses)
+    # ------------------------------------------------------------------
+    logged_date_compound: set[tuple] = {
+        (inj.compound_id, inj.injected_at.strftime("%Y-%m-%d"))
+        for inj in timeline_rows
+    }
+
+    sched_map: dict[tuple, dict] = {}
+    for protocol in protocols:
+        compound = protocol.compound
+        assignee = protocol.assignee
+        if not compound or not assignee or not protocol.active:
+            continue
+
+        fire_dates = _fire_dates_in_range(protocol, thirty_ago.date(), now.date())
+        for d in fire_dates:
+            date_str = d.strftime("%Y-%m-%d")
+            if (protocol.compound_id, date_str) in logged_date_compound:
+                continue
+            key = (date_str, protocol.assignee_user_id, protocol.compound_id)
+            if key not in sched_map:
+                sched_map[key] = {
+                    "compound_name": compound.name,
+                    "user_name": assignee.name,
+                    "count": 0,
+                    "dose_mcg": 0,
+                }
+            sched_map[key]["count"] += 1
+            sched_map[key]["dose_mcg"] += protocol.dose_mcg or 0
+
+    timeline_scheduled = [
+        TimelineScheduledPoint(
+            date=k[0],
+            user_id=k[1],
+            compound_id=k[2],
+            compound_name=v["compound_name"],
+            user_name=v["user_name"],
+            count=v["count"],
+            dose_mcg=v["dose_mcg"] or None,
+        )
+        for k, v in sorted(sched_map.items())
+    ]
+
     return DashboardResponse(
         next_doses=next_doses,
         last_by_compound=last_by_compound,
@@ -251,4 +297,5 @@ def get_dashboard(
         my_week_summary=my_week_summary,
         recent=recent,
         timeline=timeline,
+        timeline_scheduled=timeline_scheduled,
     )

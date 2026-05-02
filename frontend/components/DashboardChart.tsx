@@ -10,8 +10,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { getCompoundHexColor, getUserHexColor } from "@/lib/colors";
-import { HouseholdUser, TimelinePoint } from "@/lib/types";
+import { getUserHexColor } from "@/lib/colors";
+import { HouseholdUser, TimelinePoint, TimelineScheduledPoint } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,6 +21,7 @@ type ChartMode = "compound" | "person" | "grouped";
 
 interface Props {
   data: TimelinePoint[];
+  scheduledData: TimelineScheduledPoint[];
   householdUsers: HouseholdUser[];
 }
 
@@ -116,17 +117,46 @@ function ChartTooltip({
 // Chart pivot helpers
 // ---------------------------------------------------------------------------
 
-/** "By compound" — one stacked segment per compound, summed across users. */
-function buildCompoundData(data: TimelinePoint[]) {
-  const compounds = Array.from(new Set(data.map((d) => d.compound_name)));
+const SCHED_SUFFIX = "__sched";
+// Minimum bar height for scheduled compounds with no dose_mcg (keeps bars visible).
+const SCHED_FALLBACK_MCG = 150;
+
+/** "By compound" — one stacked segment per compound, summed across users.
+ *  Also merges scheduled (unlogged) doses as faint projected bars. */
+function buildCompoundData(data: TimelinePoint[], scheduled: TimelineScheduledPoint[]) {
+  // Build compound_id lookup from both actual and scheduled data.
+  const compoundIdByName: Record<string, number> = {};
+  for (const pt of data) compoundIdByName[pt.compound_name] = pt.compound_id;
+  for (const pt of scheduled) compoundIdByName[pt.compound_name] = pt.compound_id;
+
+  const actualCompounds = Array.from(new Set(data.map((d) => d.compound_name)));
+  const scheduledCompounds = Array.from(
+    new Set(scheduled.map((s) => s.compound_name))
+  ).filter((name) => !actualCompounds.includes(name));
+  // Compounds that appear in both actual and scheduled (logged some days, not others)
+  const mixedScheduled = Array.from(
+    new Set(scheduled.map((s) => s.compound_name))
+  ).filter((name) => actualCompounds.includes(name));
+  const allScheduledNames = [...scheduledCompounds, ...mixedScheduled];
+
   const byDate: Record<string, Record<string, number>> = {};
+
   for (const pt of data) {
     if (!byDate[pt.date]) byDate[pt.date] = { date: pt.date };
     byDate[pt.date][pt.compound_name] = (byDate[pt.date][pt.compound_name] ?? 0) + pt.total_mcg;
   }
+  for (const pt of scheduled) {
+    if (!byDate[pt.date]) byDate[pt.date] = { date: pt.date };
+    const key = pt.compound_name + SCHED_SUFFIX;
+    const value = pt.dose_mcg ?? SCHED_FALLBACK_MCG;
+    byDate[pt.date][key] = (byDate[pt.date][key] ?? 0) + value;
+  }
+
   return {
     chartData: Object.values(byDate).sort((a, b) => (a.date as string).localeCompare(b.date as string)),
-    keys: compounds,
+    actualCompounds,
+    allScheduledNames,
+    compoundIdByName,
   };
 }
 
@@ -152,6 +182,8 @@ function buildPersonData(data: TimelinePoint[], householdUsers: HouseholdUser[])
  */
 function buildGroupedData(data: TimelinePoint[], householdUsers: HouseholdUser[]) {
   const compounds = Array.from(new Set(data.map((d) => d.compound_name)));
+  const compoundIdByName: Record<string, number> = {};
+  for (const pt of data) compoundIdByName[pt.compound_name] = pt.compound_id;
   const userOrder = householdUsers.map((u) => ({ id: u.id, name: u.name }));
   const byDate: Record<string, Record<string, number>> = {};
   for (const pt of data) {
@@ -163,6 +195,7 @@ function buildGroupedData(data: TimelinePoint[], householdUsers: HouseholdUser[]
     chartData: Object.values(byDate).sort((a, b) => (a.date as string).localeCompare(b.date as string)),
     userOrder,
     compounds,
+    compoundIdByName,
   };
 }
 
@@ -173,7 +206,7 @@ function buildGroupedData(data: TimelinePoint[], householdUsers: HouseholdUser[]
 const STORAGE_KEY = "dashboard_chart_mode";
 const GROUPED_USER_LIMIT = 3; // disable Grouped button above this threshold on mobile
 
-export default function DashboardChart({ data, householdUsers }: Props) {
+export default function DashboardChart({ data, scheduledData, householdUsers }: Props) {
   const [mode, setMode] = useState<ChartMode>("compound");
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
   const groupedDisabled = isMobile && householdUsers.length > GROUPED_USER_LIMIT;
@@ -192,15 +225,31 @@ export default function DashboardChart({ data, householdUsers }: Props) {
     localStorage.setItem(STORAGE_KEY, m);
   };
 
-  if (data.length === 0) {
+  if (data.length === 0 && scheduledData.length === 0) {
     return (
       <div className="flex h-40 items-center justify-center text-sm text-gray-400 dark:text-gray-500">
-        No injections in the last 30 days
+        No doses in the last 30 days
       </div>
     );
   }
 
   const dateMap = buildDateMap(data);
+  // For person/grouped modes, ensure scheduled dates appear by injecting synthetic
+  // zero-total points so those days show on the X axis.
+  const dataWithScheduledDates: TimelinePoint[] = [
+    ...data,
+    ...scheduledData
+      .filter((s) => !data.some((d) => d.date === s.date))
+      .map((s) => ({
+        date: s.date,
+        compound_id: s.compound_id,
+        compound_name: s.compound_name,
+        user_id: s.user_id,
+        user_name: s.user_name,
+        total_mcg: 0,
+        count: 0,
+      })),
+  ];
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tooltipRenderer = (props: any) => (
@@ -226,28 +275,66 @@ export default function DashboardChart({ data, householdUsers }: Props) {
   let chart: React.ReactNode;
 
   if (mode === "compound") {
-    const { chartData, keys } = buildCompoundData(data);
+    const { chartData, actualCompounds, allScheduledNames, compoundIdByName } = buildCompoundData(data, scheduledData);
+    const allActualKeys = actualCompounds.length + allScheduledNames.length;
     chart = (
       <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
         <XAxis {...xAxisProps} />
         <YAxis {...yAxisProps} />
         <Tooltip content={tooltipRenderer} />
-        {keys.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
-        {keys.map((name, i) => (
+        {allActualKeys > 1 && (
+          <Legend
+            wrapperStyle={{ fontSize: 12 }}
+            payload={[
+              ...actualCompounds.map((name) => ({
+                value: name,
+                type: "square" as const,
+                color: getUserHexColor(compoundIdByName[name] ?? 0),
+              })),
+              ...allScheduledNames.map((name) => ({
+                value: `${name} (scheduled)`,
+                type: "square" as const,
+                color: getUserHexColor(compoundIdByName[name] ?? 0),
+              })),
+            ]}
+          />
+        )}
+        {/* Actual logged doses */}
+        {actualCompounds.map((name, i) => (
           <Bar
             key={name}
             dataKey={name}
             stackId="a"
-            fill={getCompoundHexColor(i)}
-            radius={i === keys.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+            fill={getUserHexColor(compoundIdByName[name] ?? 0)}
+            radius={i === actualCompounds.length - 1 && allScheduledNames.length === 0 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
           />
         ))}
+        {/* Projected scheduled doses — faint outlined bars */}
+        {allScheduledNames.map((name, i) => {
+          const color = getUserHexColor(compoundIdByName[name] ?? 0);
+          const isLast = i === allScheduledNames.length - 1;
+          return (
+            <Bar
+              key={name + SCHED_SUFFIX}
+              dataKey={name + SCHED_SUFFIX}
+              name={`${name} (scheduled)`}
+              stackId="a"
+              fill={color}
+              fillOpacity={0.18}
+              stroke={color}
+              strokeWidth={1}
+              strokeDasharray="3 2"
+              radius={isLast ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+              legendType="none"
+            />
+          );
+        })}
       </BarChart>
     );
 
   // ── Mode: By person ────────────────────────────────────────────────────────
   } else if (mode === "person") {
-    const { chartData, userOrder } = buildPersonData(data, householdUsers);
+    const { chartData, userOrder } = buildPersonData(dataWithScheduledDates, householdUsers);
     chart = (
       <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
         <XAxis {...xAxisProps} />
@@ -277,7 +364,7 @@ export default function DashboardChart({ data, householdUsers }: Props) {
 
   // ── Mode: Grouped ──────────────────────────────────────────────────────────
   } else {
-    const { chartData, userOrder, compounds } = buildGroupedData(data, householdUsers);
+    const { chartData, userOrder, compounds, compoundIdByName } = buildGroupedData(dataWithScheduledDates, householdUsers);
     // Each user gets their own stackId; compounds within a user are stacked.
     // Bars across users are side-by-side.
     const bars: React.ReactNode[] = [];
@@ -291,7 +378,7 @@ export default function DashboardChart({ data, householdUsers }: Props) {
             dataKey={dataKey}
             name={cpd}
             stackId={String(u.id)}
-            fill={getCompoundHexColor(ci)}
+            fill={getUserHexColor(compoundIdByName[cpd] ?? ci)}
             radius={isTop ? [3, 3, 0, 0] : [0, 0, 0, 0]}
           />
         );
@@ -305,10 +392,10 @@ export default function DashboardChart({ data, householdUsers }: Props) {
         <Tooltip content={tooltipRenderer} />
         <Legend
           wrapperStyle={{ fontSize: 12 }}
-          payload={compounds.map((name, i) => ({
+          payload={compounds.map((name) => ({
             value: name,
             type: "square" as const,
-            color: getCompoundHexColor(i),
+            color: getUserHexColor(compoundIdByName[name] ?? 0),
           }))}
         />
         {bars}

@@ -480,6 +480,16 @@ class TimelinePoint(BaseModel):
     count: int
 
 
+class TimelineScheduledPoint(BaseModel):
+    date: str
+    compound_id: int
+    compound_name: str
+    user_id: int
+    user_name: str
+    count: int
+    dose_mcg: int | None
+
+
 class DashboardResponse(BaseModel):
     next_doses: list[NextDoseItem]
     last_by_compound: list[LastByCompoundItem]
@@ -487,6 +497,7 @@ class DashboardResponse(BaseModel):
     my_week_summary: WeekSummary
     recent: list[InjectionRead]
     timeline: list[TimelinePoint]
+    timeline_scheduled: list[TimelineScheduledPoint]
 
 
 # ---------------------------------------------------------------------------

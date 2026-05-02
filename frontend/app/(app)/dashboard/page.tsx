@@ -227,7 +227,7 @@ export default function DashboardPage() {
       {data && (
         <section>
           <Card className="overflow-hidden">
-            <DashboardChart data={data.timeline} householdUsers={householdUsers} />
+            <DashboardChart data={data.timeline} scheduledData={data.timeline_scheduled} householdUsers={householdUsers} />
           </Card>
         </section>
       )}

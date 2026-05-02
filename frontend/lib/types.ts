@@ -270,6 +270,16 @@ export interface TimelinePoint {
   count: number;
 }
 
+export interface TimelineScheduledPoint {
+  date: string;
+  compound_id: number;
+  compound_name: string;
+  user_id: number;
+  user_name: string;
+  count: number;
+  dose_mcg: number | null;
+}
+
 export interface DashboardData {
   next_doses: NextDoseItem[];
   last_by_compound: LastByCompoundItem[];
@@ -277,6 +287,7 @@ export interface DashboardData {
   my_week_summary: WeekSummary;
   recent: InjectionRead[];
   timeline: TimelinePoint[];
+  timeline_scheduled: TimelineScheduledPoint[];
 }
 
 export interface ReferenceResult {
