@@ -29,7 +29,7 @@ interface Props {
 interface DayEntry {
   userName: string;
   userId: number;
-  compounds: { name: string; mcg: number }[];
+  compounds: { name: string; mcg: number; count: number }[];
   userTotal: number;
 }
 
@@ -57,7 +57,7 @@ function buildDateMap(data: TimelinePoint[]): Record<string, DayEntry[]> {
         userTotal: 0,
       };
     }
-    map[pt.date][pt.user_id].compounds.push({ name: pt.compound_name, mcg: pt.total_mcg });
+    map[pt.date][pt.user_id].compounds.push({ name: pt.compound_name, mcg: pt.total_mcg, count: pt.count });
     map[pt.date][pt.user_id].userTotal += pt.total_mcg;
   }
   return Object.fromEntries(
@@ -94,17 +94,17 @@ function ChartTooltip({
           <p className="font-medium text-gray-700 dark:text-gray-300">{entry.userName}</p>
           {entry.compounds.map((c) => (
             <p key={c.name} className="ml-2 text-gray-500 dark:text-gray-400">
-              · {c.name}: {c.mcg.toLocaleString()} mcg
+              · {c.name}: {c.mcg > 0 ? `${c.mcg.toLocaleString()} mcg` : `${c.count} dose${c.count !== 1 ? "s" : ""}`}
             </p>
           ))}
-          {entry.compounds.length > 1 && (
+          {entry.compounds.length > 1 && entry.userTotal > 0 && (
             <p className="ml-2 font-medium text-gray-600 dark:text-gray-400">
               Total: {entry.userTotal.toLocaleString()} mcg
             </p>
           )}
         </div>
       ))}
-      {entries.length > 1 && (
+      {entries.length > 1 && dayTotal > 0 && (
         <p className="mt-1 border-t border-gray-100 pt-1 font-semibold text-gray-900 dark:border-gray-700 dark:text-white">
           Day total: {dayTotal.toLocaleString()} mcg
         </p>
@@ -140,10 +140,20 @@ function buildCompoundData(data: TimelinePoint[], scheduled: TimelineScheduledPo
   const allScheduledNames = [...scheduledCompounds, ...mixedScheduled];
 
   const byDate: Record<string, Record<string, number>> = {};
+  const countByDateCompound: Record<string, Record<string, number>> = {};
 
   for (const pt of data) {
     if (!byDate[pt.date]) byDate[pt.date] = { date: pt.date };
     byDate[pt.date][pt.compound_name] = (byDate[pt.date][pt.compound_name] ?? 0) + pt.total_mcg;
+    if (!countByDateCompound[pt.date]) countByDateCompound[pt.date] = {};
+    countByDateCompound[pt.date][pt.compound_name] = (countByDateCompound[pt.date][pt.compound_name] ?? 0) + pt.count;
+  }
+  for (const date of Object.keys(countByDateCompound)) {
+    for (const cpd of Object.keys(countByDateCompound[date])) {
+      if ((countByDateCompound[date][cpd] ?? 0) > 0 && (byDate[date]?.[cpd] ?? 0) === 0) {
+        byDate[date][cpd] = SCHED_FALLBACK_MCG;
+      }
+    }
   }
   for (const pt of scheduled) {
     if (!byDate[pt.date]) byDate[pt.date] = { date: pt.date };
@@ -165,9 +175,19 @@ function buildPersonData(data: TimelinePoint[], householdUsers: HouseholdUser[])
   // Maintain order from householdUsers so colors are stable.
   const userOrder = householdUsers.map((u) => ({ id: u.id, name: u.name }));
   const byDate: Record<string, Record<string, number>> = {};
+  const countByDateUser: Record<string, Record<string, number>> = {};
   for (const pt of data) {
     if (!byDate[pt.date]) byDate[pt.date] = { date: pt.date };
     byDate[pt.date][String(pt.user_id)] = (byDate[pt.date][String(pt.user_id)] ?? 0) + pt.total_mcg;
+    if (!countByDateUser[pt.date]) countByDateUser[pt.date] = {};
+    countByDateUser[pt.date][String(pt.user_id)] = (countByDateUser[pt.date][String(pt.user_id)] ?? 0) + pt.count;
+  }
+  for (const date of Object.keys(countByDateUser)) {
+    for (const uid of Object.keys(countByDateUser[date])) {
+      if ((countByDateUser[date][uid] ?? 0) > 0 && (byDate[date]?.[uid] ?? 0) === 0) {
+        byDate[date][uid] = SCHED_FALLBACK_MCG;
+      }
+    }
   }
   return {
     chartData: Object.values(byDate).sort((a, b) => (a.date as string).localeCompare(b.date as string)),
@@ -186,10 +206,20 @@ function buildGroupedData(data: TimelinePoint[], householdUsers: HouseholdUser[]
   for (const pt of data) compoundIdByName[pt.compound_name] = pt.compound_id;
   const userOrder = householdUsers.map((u) => ({ id: u.id, name: u.name }));
   const byDate: Record<string, Record<string, number>> = {};
+  const countByDateKey: Record<string, Record<string, number>> = {};
   for (const pt of data) {
     if (!byDate[pt.date]) byDate[pt.date] = { date: pt.date };
     const key = `${pt.user_id}__${pt.compound_name}`;
     byDate[pt.date][key] = (byDate[pt.date][key] ?? 0) + pt.total_mcg;
+    if (!countByDateKey[pt.date]) countByDateKey[pt.date] = {};
+    countByDateKey[pt.date][key] = (countByDateKey[pt.date][key] ?? 0) + pt.count;
+  }
+  for (const date of Object.keys(countByDateKey)) {
+    for (const key of Object.keys(countByDateKey[date])) {
+      if ((countByDateKey[date][key] ?? 0) > 0 && (byDate[date]?.[key] ?? 0) === 0) {
+        byDate[date][key] = SCHED_FALLBACK_MCG;
+      }
+    }
   }
   return {
     chartData: Object.values(byDate).sort((a, b) => (a.date as string).localeCompare(b.date as string)),

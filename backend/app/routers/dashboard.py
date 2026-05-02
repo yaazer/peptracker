@@ -229,7 +229,7 @@ def get_dashboard(
             key = (date_str, user_id, inj.compound_id, compound_name(inj.compound_id))
             if key not in tl_map:
                 tl_map[key] = {"total_mcg": 0, "count": 0, "user_name": user_name}
-            tl_map[key]["total_mcg"] += inj.dose_mcg
+            tl_map[key]["total_mcg"] += inj.dose_mcg or 0
             tl_map[key]["count"] += 1
 
     timeline = [
